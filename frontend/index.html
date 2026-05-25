@@ -1,0 +1,2208 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SyncGuard — NAS Backup Manager</title>
+<link rel="icon" href="/icon.png?v=2" type="image/png">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0f1a25;
+    --bg2: #142231;
+    --bg3: #1b2d3f;
+    --panel: rgba(20, 34, 49, 0.92);
+    --border: #24384d;
+    --border2: #34506b;
+    --text: #eff6fb;
+    --text2: #a9bdcf;
+    --text3: #6f879d;
+    --accent: #62d0d6;
+    --accent2: #8ae0d8;
+    --green: #63dc8f;
+    --green2: #16a34a;
+    --red: #ef6b6b;
+    --amber: #efc867;
+    --blue: #7cb3ff;
+    --teal: #57d8c3;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+    --shadow: 0 20px 45px rgba(4, 12, 24, 0.28);
+  }
+
+  html[data-theme="light"] {
+    --bg: #f4f8fb;
+    --bg2: #ffffff;
+    --bg3: #edf4f9;
+    --panel: rgba(255, 255, 255, 0.96);
+    --border: #d7e3ec;
+    --border2: #c4d5e1;
+    --text: #213648;
+    --text2: #577086;
+    --text3: #8298aa;
+    --accent: #3cbec6;
+    --accent2: #6ed1cd;
+    --green: #31b86a;
+    --green2: #21884e;
+    --red: #d95b5b;
+    --amber: #cd9b34;
+    --blue: #5a95e6;
+    --teal: #2abca6;
+    --shadow: 0 18px 36px rgba(41, 72, 102, 0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(98, 208, 214, 0.14) 0, transparent 28%),
+      radial-gradient(circle at bottom right, rgba(239, 200, 103, 0.12) 0, transparent 24%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    background: rgba(15, 26, 37, 0.92);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(16px);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: -0.3px;
+  }
+
+  .logo-img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    flex-shrink: 0;
+    border-radius: 6px;
+  }
+
+  .hi {
+    flex-shrink: 0;
+    display: block;
+  }
+  .hi-sm { width: 14px; height: 14px; }
+  .hi-md { width: 18px; height: 18px; }
+  .hi-lg { width: 48px; height: 48px; margin: 0 auto 12px; color: var(--text3); }
+
+  .status-line {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .status-line .hi-sm { width: 16px; height: 16px; margin-top: 1px; }
+
+  .connection-result.warn {
+    background: rgba(245,158,11,.1);
+    border: 1px solid var(--amber);
+    color: var(--amber);
+  }
+
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nav-tab {
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text2);
+    transition: all .15s;
+    border: none;
+    background: none;
+    font-family: var(--sans);
+  }
+
+  .nav-tab:hover { color: var(--text); background: rgba(255,255,255,.05); }
+  .nav-tab.active { color: #06222a; background: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .theme-toggle {
+    min-width: 94px;
+    justify-content: center;
+  }
+
+  .ws-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text3);
+  }
+
+  .ws-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text3);
+    transition: background .3s;
+  }
+
+  .ws-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  .desktop-bar {
+    background: rgba(20, 34, 49, 0.86);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text2);
+    flex-shrink: 0;
+  }
+
+  .desktop-bar-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .desktop-bar-info span.mono {
+    font-family: var(--mono);
+    color: var(--text);
+  }
+
+  .btn.shutdown {
+    color: var(--red);
+    border-color: rgba(239,68,68,.35);
+  }
+
+  .btn.shutdown:hover {
+    background: rgba(239,68,68,.12);
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  .desktop-hint {
+    background: rgba(98, 208, 214, .08);
+    border: 1px solid rgba(98, 208, 214, .2);
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--text2);
+    margin-bottom: 16px;
+  }
+
+  .desktop-hint strong { color: var(--text); }
+
+  /* ── Layout ── */
+  main { flex: 1; display: flex; }
+
+  .page { display: none; flex: 1; padding: 24px; max-width: 1160px; margin: 0 auto; width: 100%; }
+  .page.active { display: block; }
+
+  /* ── Dashboard page ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--text3); margin-bottom: 6px; }
+  .stat-value { font-size: 28px; font-weight: 600; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  .jobs-grid { display: flex; flex-direction: column; gap: 12px; }
+
+  .job-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 16px 20px;
+    transition: border-color .15s, transform .15s, background .15s;
+    box-shadow: var(--shadow);
+  }
+
+  .job-card:hover { border-color: var(--border2); transform: translateY(-1px); }
+  .job-card.running { border-color: var(--accent); }
+  .job-card.success { border-color: var(--border); }
+  .job-card.failed { border-color: var(--red); }
+
+  .job-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .job-status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--text3);
+    margin-top: 4px;
+    flex-shrink: 0;
+    transition: all .3s;
+  }
+
+  .job-status-dot.idle { background: var(--text3); }
+  .job-status-dot.running { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .job-status-dot.success { background: var(--green); }
+  .job-status-dot.failed { background: var(--red); }
+  .job-status-dot.stopped { background: var(--amber); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+  }
+
+  .job-info { flex: 1; min-width: 0; }
+  .job-name { font-weight: 500; font-size: 15px; margin-bottom: 3px; }
+  .job-path { font-size: 12px; color: var(--text3); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-desc { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+  .job-meta {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .job-meta-item { font-size: 11px; color: var(--text3); }
+  .job-meta-item span { color: var(--text2); }
+
+  .job-progress-bar {
+    height: 3px;
+    background: var(--bg3);
+    border-radius: 2px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    display: none;
+  }
+
+  .job-card.running .job-progress-bar { display: block; }
+
+  .job-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--teal));
+    border-radius: 2px;
+    transition: width .5s ease;
+    width: 0%;
+  }
+
+  .job-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .btn {
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(111, 135, 157, 0.28);
+    background: var(--bg3);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: var(--sans);
+    font-weight: 500;
+    transition: all .15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .btn:hover { border-color: rgba(111, 135, 157, 0.16); background: rgba(255,255,255,.03); color: var(--accent); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: rgba(98, 208, 214, 0.42); color: #06222a; }
+  .btn.primary:hover { background: var(--accent2); border-color: rgba(138, 224, 216, 0.42); color: #06222a; }
+  .btn.danger { color: var(--red); }
+  .btn.danger:hover { border-color: var(--red); }
+  .btn.stop { color: var(--amber); }
+  .btn.stop:hover { border-color: var(--amber); }
+
+  .job-status-text {
+    font-size: 12px;
+    color: var(--text3);
+    margin-left: auto;
+    font-family: var(--mono);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .3px;
+  }
+
+  .badge::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 3px rgba(255,255,255,.06);
+  }
+
+  .badge.idle { background: rgba(90,90,110,.2); color: var(--text3); }
+  .badge.running { background: rgba(108,99,255,.2); color: var(--accent2); }
+  .badge.success { background: rgba(34,197,94,.15); color: var(--green); }
+  .badge.failed { background: rgba(239,68,68,.15); color: var(--red); }
+  .badge.stopped { background: rgba(245,158,11,.15); color: var(--amber); }
+
+  /* ── Log viewer ── */
+  .log-panel {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .log-panel.open { display: block; }
+
+  .log-line {
+    padding: 2px 12px;
+    color: var(--text2);
+    border-bottom: 1px solid transparent;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .log-line .log-meta {
+    display: inline-block;
+    margin-right: 8px;
+    font-size: 10px;
+    color: var(--text3);
+    white-space: nowrap;
+    vertical-align: baseline;
+  }
+
+  .log-line .log-time {
+    font-family: var(--mono);
+    color: var(--text2);
+  }
+
+  .log-line .log-delta {
+    font-family: var(--mono);
+    color: var(--teal);
+    margin-left: 6px;
+  }
+
+  .log-line .log-text { color: var(--text2); }
+
+  .log-line.error { color: var(--red); }
+  .log-line.highlight { color: var(--teal); }
+
+  /* ── Settings page ── */
+  .settings-section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+  }
+
+  .settings-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: var(--text2);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 14px;
+  }
+
+  .form-label {
+    font-size: 13px;
+    color: var(--text2);
+    padding-top: 8px;
+  }
+
+  .form-hint {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 3px;
+  }
+
+  .form-input, .form-select {
+    background: var(--bg3);
+    border: 1px solid rgba(111, 135, 157, 0.28);
+    border-radius: 12px;
+    color: var(--text);
+    padding: 7px 10px;
+    font-size: 13px;
+    font-family: var(--sans);
+    width: 100%;
+    transition: border-color .15s;
+  }
+
+  .form-input:focus, .form-select:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--border2));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg3));
+  }
+
+  .form-input:hover, .form-select:hover {
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--border2));
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg3));
+  }
+
+  .form-input.mono { font-family: var(--mono); }
+
+  .form-select option { background: var(--bg3); }
+
+  .connection-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: var(--mono);
+    display: none;
+  }
+
+  .connection-result.ok { background: rgba(34,197,94,.1); border: 1px solid var(--green); color: var(--green); }
+  .connection-result.fail { background: rgba(239,68,68,.1); border: 1px solid var(--red); color: var(--red); }
+
+  /* ── Add job modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 24px;
+    width: 560px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text3);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .modal-close:hover { color: var(--text); }
+
+  .modal-form-row { margin-bottom: 14px; }
+  .modal-label { font-size: 12px; color: var(--text2); margin-bottom: 5px; display: block; font-weight: 500; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+  .modal.modal-confirm { width: 420px; max-width: 92vw; }
+  .modal-confirm-body {
+    font-size: 14px;
+    color: var(--text2);
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+  .modal-confirm-body strong { color: var(--text); font-weight: 500; }
+  .modal-confirm-hint {
+    font-size: 12px;
+    color: var(--text3);
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--bg3);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  /* ── Alert ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    z-index: 300;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all .2s;
+    max-width: 320px;
+  }
+
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.ok { border-color: var(--green); color: var(--green); }
+  .toast.err { border-color: var(--red); color: var(--red); }
+
+  /* ── Logs page ── */
+  .logs-page-log {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .logs-page-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .logs-page-header:hover { background: var(--bg3); }
+
+  .full-log {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: var(--bg);
+    display: none;
+  }
+
+  .full-log.open { display: block; }
+  .full-log-line { line-height: 1.7; color: var(--text2); white-space: pre-wrap; word-break: break-all; }
+  .full-log-line.err { color: var(--red); }
+  .full-log-line .log-meta { font-size: 10px; margin-right: 8px; }
+  .full-log-line .log-delta { color: var(--teal); font-family: var(--mono); margin-left: 6px; }
+
+  .page-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px;
+    color: var(--text3);
+  }
+
+  .empty-state .empty-icon { margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .form-row { grid-template-columns: 1fr; }
+    header { padding: 0 16px; }
+    .page { padding: 16px; }
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <img class="logo-img" src="/icon.png?v=2" alt="SyncGuard" width="32" height="32">
+    SyncGuard
+  </div>
+  <nav class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('dashboard')">Dashboard</button>
+    <button class="nav-tab" onclick="showPage('settings')">Settings</button>
+    <button class="nav-tab" onclick="showPage('logs')">Logs</button>
+  </nav>
+  <div class="header-right">
+    <button class="btn theme-toggle" id="btn-theme" onclick="toggleTheme()"></button>
+    <div class="ws-status">
+      <div class="ws-dot" id="ws-dot"></div>
+      <span id="ws-label">connecting</span>
+    </div>
+    <button class="btn shutdown" id="btn-shutdown" onclick="openShutdownModal()" title="Hentikan proses Node di komputer ini">
+      <span class="btn-label">Stop Server</span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ══ DASHBOARD PAGE ══ -->
+  <div class="page active" id="page-dashboard">
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Total Jobs</div>
+        <div class="stat-value" id="stat-total">—</div>
+        <div class="stat-sub">backup tasks</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Running</div>
+        <div class="stat-value" id="stat-running" style="color:var(--accent)">—</div>
+        <div class="stat-sub">active now</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Last Success</div>
+        <div class="stat-value" id="stat-success" style="color:var(--green);font-size:18px">—</div>
+        <div class="stat-sub" id="stat-success-sub">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">NAS</div>
+        <div class="stat-value" id="stat-nas" style="font-size:14px;font-family:var(--mono);padding-top:8px">—</div>
+        <div class="stat-sub" id="stat-nas-sub">not configured</div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <span style="font-weight:500;font-size:15px">Backup Jobs</span>
+      <button class="btn primary" onclick="openAddJobModal()" id="btn-add-job"></button>
+    </div>
+
+    <div class="jobs-grid" id="jobs-grid">
+      <div class="empty-state" id="jobs-empty">
+        <p>No backup jobs yet. Click <strong>Add Job</strong> to get started.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SETTINGS PAGE ══ -->
+  <div class="page" id="page-settings">
+    <div class="page-title">Settings</div>
+
+    <div class="desktop-hint">
+      <strong>Mode Desktop:</strong> Server berjalan di jendela konsol <code style="font-family:var(--mono);font-size:11px">start.bat</code>.
+      Menutup tab browser <em>tidak</em> menghentikan backup engine.
+      Gunakan <strong>Stop Server</strong> (kanan atas), <strong>Ctrl+C</strong> di konsol, atau jalankan <strong>stop.bat</strong>.
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-title">Aplikasi Desktop</div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Status Server</div>
+          <div class="form-hint">Proses Node lokal</div>
+        </div>
+        <div id="server-info-panel" style="font-family:var(--mono);font-size:12px;color:var(--text2);padding-top:6px">—</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn shutdown" onclick="openShutdownModal()">
+          <span class="btn-label">Stop Server</span>
+        </button>
+        <button class="btn" onclick="loadServerInfo()" id="btn-refresh-server"></button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-title">Sync Engine</div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Default Engine</div>
+          <div class="form-hint">Pilih metode backup default untuk job baru</div>
+        </div>
+        <select class="form-select" id="sync-engine" onchange="toggleEngineSettings()">
+          <option value="rsync">Rsync (SSH ke NAS)</option>
+          <option value="robocopy">Robocopy (SMB/UNC ke NAS)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-section" id="nas-section">
+      <div class="settings-title">NAS Configuration <span style="font-weight:400;text-transform:none;color:var(--text3)">— untuk Rsync</span></div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">IP Address</div>
+          <div class="form-hint">Synology NAS IP</div>
+        </div>
+        <input class="form-input mono" id="nas-ip" placeholder="192.168.1.100">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">SSH User</div>
+          <div class="form-hint">Synology SSH user</div>
+        </div>
+        <input class="form-input" id="nas-user" placeholder="admin">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">SSH Port</div>
+          <div class="form-hint">Default: 22</div>
+        </div>
+        <input class="form-input mono" id="nas-port" placeholder="22" style="width:100px">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">SSH Password</div>
+          <div class="form-hint">Untuk deploy key &amp; koneksi awal (disimpan lokal)</div>
+        </div>
+        <input class="form-input" id="nas-password" type="password" placeholder="Password SSH NAS" autocomplete="new-password">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Base Backup Path</div>
+          <div class="form-hint">Path di NAS</div>
+        </div>
+        <input class="form-input mono" id="nas-path" placeholder="/volume1/backup">
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+        <button class="btn primary" onclick="saveNasConfig()">Save NAS Config</button>
+        <button class="btn" onclick="testConnection()">Test Connection</button>
+      </div>
+      <div class="connection-result" id="conn-result"></div>
+
+      <div class="settings-title" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">SSH Key (passwordless backup)</div>
+      <p id="ssh-key-status" style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6">Memuat status key...</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn" onclick="generateSshKey()">Generate SSH Key</button>
+        <button class="btn primary" onclick="deploySshKey()">Deploy SSH Key ke NAS</button>
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-bottom:12px">Deploy mengirim public key ke <code style="font-family:var(--mono)">~/.ssh/authorized_keys</code> di NAS (seperti ssh-copy-id). Setelah sukses, backup rsync tidak perlu password lagi.</p>
+      <div class="connection-result" id="ssh-deploy-result"></div>
+    </div>
+
+    <div class="settings-section" id="rsync-section">
+      <div class="settings-title">Rsync Settings</div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Rsync Path</div>
+          <div class="form-hint">Bundled di project: tools/cwrsync/bin/</div>
+        </div>
+        <input class="form-input mono" id="rsync-path" placeholder="tools/cwrsync/bin/rsync.exe" readonly>
+      </div>
+      <p id="rsync-detect-status" style="font-size:12px;color:var(--text2);margin:-6px 0 12px 0;line-height:1.6"></p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn primary" type="button" onclick="installCwRsync()">Install cwRsync ke Project</button>
+        <button class="btn" type="button" onclick="testRsync()">Test Rsync</button>
+      </div>
+      <div class="connection-result" id="rsync-test-result"></div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">SSH Key Path</div>
+          <div class="form-hint">Path ke private key (otomatis setelah generate/deploy)</div>
+        </div>
+        <input class="form-input mono" id="ssh-key" placeholder="C:\Users\user\.ssh\id_rsa">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Default Options</div>
+          <div class="form-hint">Rsync flags default</div>
+        </div>
+        <input class="form-input mono" id="rsync-opts" placeholder="-avz --progress --delete">
+      </div>
+    </div>
+
+    <div class="settings-section" id="robocopy-section">
+      <div class="settings-title">Robocopy Settings <span style="font-weight:400;text-transform:none;color:var(--text3)">— native Windows</span></div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">SMB Share Path</div>
+          <div class="form-hint">UNC path ke folder backup di NAS, e.g. \\192.168.1.100\backup</div>
+        </div>
+        <input class="form-input mono" id="smb-share" placeholder="\\192.168.1.100\backup">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">SMB Password</div>
+          <div class="form-hint">Opsional — untuk map drive otomatis (kosongkan = pakai SSH password)</div>
+        </div>
+        <input class="form-input" id="smb-password" type="password" placeholder="Password SMB / NAS user" autocomplete="new-password">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Robocopy Path</div>
+          <div class="form-hint">Default: robocopy (built-in Windows)</div>
+        </div>
+        <input class="form-input mono" id="robocopy-path" placeholder="robocopy">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Default Options</div>
+          <div class="form-hint">/E = subfolder, /MIR = mirror, /Z = restartable</div>
+        </div>
+        <input class="form-input mono" id="robocopy-opts" placeholder="/E /Z /R:3 /W:5 /MT:8 /MIR">
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+        <button class="btn" onclick="testConnection('robocopy')">Test SMB Access</button>
+      </div>
+      <div class="connection-result" id="smb-result"></div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-title">SyncGuard Hub <span style="font-weight:400;text-transform:none;color:var(--text3)">— pusat monitoring</span></div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Hub aktif</div>
+          <div class="form-hint">Kirim status ke server pusat (outbound)</div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="hub-enabled" onchange="loadHubStatus()">
+          <span>Enabled</span>
+        </label>
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Hub URL</div>
+          <div class="form-hint">Contoh: http://192.168.1.50:7443</div>
+        </div>
+        <input class="form-input mono" id="hub-url" placeholder="http://192.168.1.50:7443">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Agent ID</div>
+          <div class="form-hint">Unik per PC (kosongkan = hostname)</div>
+        </div>
+        <input class="form-input mono" id="hub-agent-id" placeholder="pc-radiologi-01">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">API Key</div>
+          <div class="form-hint">Dari Hub Settings setelah daftar agent</div>
+        </div>
+        <input class="form-input mono" id="hub-api-key" type="password" placeholder="apiKey dari hub" autocomplete="off">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Log ke hub</div>
+        </div>
+        <select class="form-select" id="hub-log-mode">
+          <option value="off">off — hanya status run</option>
+          <option value="summary">summary — recommended</option>
+          <option value="errors">errors</option>
+          <option value="live">live — verbose</option>
+        </select>
+      </div>
+      <div class="connection-result" id="hub-status-result"></div>
+    </div>
+
+    <button class="btn primary" style="margin-bottom:20px" onclick="saveSettings()">Save All Settings</button>
+
+    <div class="settings-section" id="robocopy-guide">
+      <div class="settings-title">Robocopy Setup Guide</div>
+      <div style="font-size:13px;line-height:1.8;color:var(--text2)">
+        <p style="margin-bottom:8px">Robocopy sudah built-in di Windows — tidak perlu install tambahan.</p>
+        <p><strong style="color:var(--text)">1. Aktifkan SMB di Synology</strong></p>
+        <p style="margin-left:16px;margin-bottom:8px">Control Panel → File Services → SMB → Enable SMB service</p>
+        <p><strong style="color:var(--text)">2. Buat shared folder</strong></p>
+        <p style="margin-left:16px;margin-bottom:8px">Control Panel → Shared Folder → buat folder <code style="font-family:var(--mono);font-size:12px;color:var(--teal)">backup</code></p>
+        <p><strong style="color:var(--text)">3. Set SMB Share Path</strong></p>
+        <p style="margin-left:16px;margin-bottom:8px;font-family:var(--mono);font-size:12px;color:var(--teal)">\\192.168.1.100\backup</p>
+        <p><strong style="color:var(--text)">4. Akses dari Windows</strong></p>
+        <p style="margin-left:16px;color:var(--text3);font-family:var(--mono);font-size:12px">
+          net use Z: \\192.168.1.100\backup /user:admin password<br>
+          (atau map drive lewat File Explorer)
+        </p>
+      </div>
+    </div>
+
+    <div class="settings-section" id="rsync-guide">
+      <div class="settings-title">Rsync Setup Guide</div>
+      <div style="font-size:13px;line-height:1.8;color:var(--text2)">
+        <p style="margin-bottom:8px">Untuk menjalankan rsync di Windows, pilih salah satu cara:</p>
+        <p><strong style="color:var(--text)">1. WSL (Windows Subsystem for Linux) — Recommended</strong></p>
+        <p style="margin-left:16px;margin-bottom:8px;font-family:var(--mono);font-size:12px;color:var(--teal)">
+          Rsync Path: wsl rsync
+        </p>
+        <p><strong style="color:var(--text)">2. cwRsync (standalone)</strong></p>
+        <p style="margin-left:16px;margin-bottom:8px">Download dari <a href="https://itefix.net/cwrsync" style="color:var(--accent)">itefix.net/cwrsync</a>, lalu set path ke <code style="font-family:var(--mono);font-size:12px;color:var(--teal)">C:\cwrsync\bin\rsync.exe</code></p>
+        <p><strong style="color:var(--text)">SSH Key (tanpa password prompt)</strong></p>
+        <p style="margin-left:16px;color:var(--text3);font-family:var(--mono);font-size:12px">
+          ssh-keygen -t ed25519 -C "syncguard"<br>
+          ssh-copy-id admin@192.168.1.100
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ LOGS PAGE ══ -->
+  <div class="page" id="page-logs">
+    <div class="page-title">
+      <span>Backup Logs</span>
+      <button class="btn" onclick="loadAllLogs()" id="btn-refresh-logs"></button>
+    </div>
+    <div id="logs-container">
+      <div class="empty-state" id="logs-empty"><p>No logs yet.</p></div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="desktop-bar">
+  <div class="desktop-bar-info">
+    <span>SyncGuard Desktop</span>
+    <span>PID: <span class="mono" id="footer-pid">—</span></span>
+    <span>Port: <span class="mono" id="footer-port">7432</span></span>
+    <span>Uptime: <span class="mono" id="footer-uptime">—</span></span>
+  </div>
+  <button class="btn shutdown" onclick="openShutdownModal()">
+    <span class="btn-label">Stop Server</span>
+  </button>
+</footer>
+
+<!-- ══ ADD JOB MODAL ══ -->
+<div class="modal-overlay" id="modal-addjob">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="modal-job-title">Add Backup Job</span>
+      <button class="modal-close" onclick="closeAddJobModal()" title="Tutup" aria-label="Tutup" id="btn-modal-close"></button>
+    </div>
+    <input type="hidden" id="edit-job-id">
+    <div class="modal-form-row">
+      <label class="modal-label">Job Type</label>
+      <select class="form-select" id="job-type" onchange="toggleJobTypeFields()">
+        <option value="filesystem">Filesystem / Folder</option>
+        <option value="postgresql">PostgreSQL Database</option>
+      </select>
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">Job Name *</label>
+      <input class="form-input" id="job-name" placeholder="e.g. Documents, ProjectFiles">
+    </div>
+    <div class="modal-form-row" id="job-source-row">
+      <label class="modal-label">Source Path (Local) *</label>
+      <input class="form-input mono" id="job-source" placeholder="C:\Users\user\Documents">
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">Description</label>
+      <input class="form-input" id="job-desc" placeholder="Optional description">
+    </div>
+    <div id="job-postgres-fields" style="display:none">
+      <div class="modal-form-row">
+        <label class="modal-label">PostgreSQL Host *</label>
+        <input class="form-input mono" id="job-pg-host" placeholder="127.0.0.1">
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">PostgreSQL Port</label>
+        <input class="form-input mono" id="job-pg-port" placeholder="5432">
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">Database *</label>
+        <input class="form-input mono" id="job-pg-database" placeholder="appdb">
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">Username *</label>
+        <input class="form-input mono" id="job-pg-username" placeholder="postgres">
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">Password</label>
+        <input class="form-input" id="job-pg-password" type="password" placeholder="Isi untuk set/ganti password PostgreSQL">
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">pg_dump Path</label>
+        <input class="form-input mono" id="job-pg-dump-path" placeholder="pg_dump">
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">Dump Format</label>
+        <select class="form-select" id="job-pg-dump-format">
+          <option value="custom">Custom dump (.dump)</option>
+          <option value="plain">Plain SQL (.sql)</option>
+        </select>
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">Retention Count</label>
+        <input class="form-input mono" id="job-pg-retention" placeholder="3">
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">Extra pg_dump Options</label>
+        <input class="form-input mono" id="job-pg-extra-options" placeholder="--clean --if-exists">
+      </div>
+      <div class="modal-form-row">
+        <label class="modal-label">PostgreSQL Connection</label>
+        <div>
+          <button class="btn" type="button" onclick="testPostgresJob()">Test PostgreSQL Connection</button>
+          <div class="connection-result" id="postgres-test-result"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">Sync Engine</label>
+      <select class="form-select" id="job-engine" onchange="toggleJobEngineFields()">
+        <option value="">(use default from Settings)</option>
+        <option value="rsync">Rsync (SSH)</option>
+        <option value="robocopy">Robocopy (SMB)</option>
+      </select>
+    </div>
+    <div class="modal-form-row" id="job-dest-row" style="display:none">
+      <label class="modal-label">Destination Path (UNC)</label>
+      <input class="form-input mono" id="job-dest" placeholder="\\192.168.1.100\backup\JobName (kosongkan = auto)">
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">Schedule</label>
+      <select class="form-select" id="job-schedule">
+        <option value="manual">Manual only</option>
+        <option value="0 * * * *">Every hour</option>
+        <option value="0 2 * * *">Daily at 2:00 AM</option>
+        <option value="0 3 * * 0">Weekly (Sunday 3:00 AM)</option>
+        <option value="0 4 1 * *">Monthly (1st, 4:00 AM)</option>
+        <option value="custom">Custom cron...</option>
+      </select>
+    </div>
+    <div class="modal-form-row" id="custom-cron-row" style="display:none">
+      <label class="modal-label">Custom Cron Expression</label>
+      <input class="form-input mono" id="job-cron" placeholder="0 2 * * *">
+    </div>
+    <div class="modal-form-row" id="job-exclusions-row">
+      <label class="modal-label">Exclusions (one per line)</label>
+      <textarea class="form-input" id="job-exclusions" rows="3" placeholder="node_modules&#10;*.tmp&#10;.git" style="resize:vertical"></textarea>
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label" id="job-options-label">Sync Options</label>
+      <input class="form-input mono" id="job-options" placeholder="(leave blank for default)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAddJobModal()">Cancel</button>
+      <button class="btn primary" onclick="saveJob()">Save Job</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STOP SERVER CONFIRM ══ -->
+<div class="modal-overlay" id="modal-shutdown" role="dialog" aria-modal="true" aria-labelledby="shutdown-modal-title">
+  <div class="modal modal-confirm">
+    <div class="modal-title" id="shutdown-modal-title">
+      <span style="display:inline-flex;align-items:center;gap:8px">
+        <span id="shutdown-modal-icon" aria-hidden="true"></span>
+        <span>Stop Server</span>
+      </span>
+      <button type="button" class="modal-close" onclick="closeShutdownModal()" title="Batal" aria-label="Batal" id="btn-shutdown-modal-close"></button>
+    </div>
+    <p class="modal-confirm-body">
+      Hentikan proses <strong>SyncGuard</strong> di komputer ini?
+    </p>
+    <p class="modal-confirm-body">
+      Backup yang sedang berjalan akan dihentikan. Dashboard tidak dapat digunakan sampai Anda menjalankan <strong>SyncGuard.exe</strong> atau <strong>start.bat</strong> lagi.
+    </p>
+    <p class="modal-confirm-hint">Menutup tab browser saja tidak menghentikan server.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeShutdownModal()">Batal</button>
+      <button type="button" class="btn shutdown" id="btn-shutdown-confirm" onclick="confirmShutdownServer()">
+        <span class="btn-label">Stop Server</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TOAST ══ -->
+<div class="toast" id="toast"></div>
+
+<script>
+let ws, config = null, allStatus = {};
+const liveLog = {};
+const openLogs = {};
+
+/** Heroicons v2 outline — https://heroicons.com */
+function hi(d, size = 'sm') {
+  const paths = (Array.isArray(d) ? d : [d])
+    .map(p => `<path stroke-linecap="round" stroke-linejoin="round" d="${p}"/>`)
+    .join('');
+  return `<svg class="hi hi-${size}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">${paths}</svg>`;
+}
+
+const I = {
+  plus: hi('M12 4.5v15m7.5-7.5h-15'),
+  refresh: hi('M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99'),
+  archive: hi(['M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4', 'M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z']),
+  clipboard: hi(['M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.9.663 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z']),
+  pencil: hi(['M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10']),
+  trash: hi(['M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0']),
+  x: hi('M6 18L18 6M6 6l12 12'),
+  check: hi('M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z'),
+  warn: hi('M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z'),
+  play: hi('M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z'),
+  stop: hi('M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z'),
+  power: hi(['M12 2v10', 'M5.636 5.636a9 9 0 1012.728 0']),
+  chevron: hi('M19.5 8.25l-7.5 7.5-7.5-7.5'),
+};
+
+function emptyState(icon, messageHtml) {
+  return `<div class="empty-state"><div class="empty-icon">${icon}</div><p>${messageHtml}</p></div>`;
+}
+
+function statusLine(type, text) {
+  const icon = { ok: I.check, warn: I.warn, fail: I.x }[type] || '';
+  const color = { ok: 'var(--green)', warn: 'var(--amber)', fail: 'var(--red)' }[type] || 'inherit';
+  return `<span class="status-line" style="color:${color}">${icon}<span>${text}</span></span>`;
+}
+
+function setResult(el, type, message) {
+  if (!el) return;
+  el.style.display = 'block';
+  const cls = { ok: 'ok', warn: 'warn', fail: 'fail' }[type] || '';
+  el.className = 'connection-result ' + cls;
+  if (!message) { el.innerHTML = ''; return; }
+  if (type === 'ok' || type === 'warn' || type === 'fail') {
+    el.innerHTML = statusLine(type, esc(String(message)));
+  } else {
+    el.textContent = message;
+  }
+}
+
+function btnLabel(icon, text) {
+  return `${icon}<span>${text}</span>`;
+}
+
+function initStaticIcons() {
+  const map = [
+    ['btn-add-job', I.plus, 'Add Job', 'btn primary'],
+    ['btn-refresh-server', I.refresh, 'Refresh Info', 'btn'],
+    ['btn-refresh-logs', I.refresh, 'Refresh', 'btn'],
+    ['btn-modal-close', I.x, '', 'modal-close'],
+  ];
+  for (const [id, icon, text, cls] of map) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.className = cls;
+    el.innerHTML = text ? btnLabel(icon, text) : icon;
+  }
+  const jobsEmpty = document.getElementById('jobs-empty');
+  if (jobsEmpty) {
+    jobsEmpty.outerHTML = emptyState(I.archive, 'No backup jobs yet. Click <strong>Add Job</strong> to get started.');
+  }
+  const logsEmpty = document.getElementById('logs-empty');
+  if (logsEmpty) {
+    logsEmpty.outerHTML = emptyState(I.clipboard, 'No logs yet.');
+  }
+  document.querySelectorAll('.btn.shutdown').forEach(btn => {
+    if (!btn.querySelector('.btn-label')) return;
+    const label = btn.querySelector('.btn-label');
+    btn.innerHTML = btnLabel(I.power, label.textContent);
+  });
+  const shutdownIcon = document.getElementById('shutdown-modal-icon');
+  if (shutdownIcon) shutdownIcon.innerHTML = I.power.replace('hi-sm', 'hi-md');
+  const shutdownClose = document.getElementById('btn-shutdown-modal-close');
+  if (shutdownClose) shutdownClose.innerHTML = I.x;
+  const shutdownConfirm = document.getElementById('btn-shutdown-confirm');
+  if (shutdownConfirm) {
+    shutdownConfirm.innerHTML = btnLabel(I.power, 'Stop Server');
+  }
+  const shutdownOverlay = document.getElementById('modal-shutdown');
+  if (shutdownOverlay) {
+    shutdownOverlay.addEventListener('click', (e) => {
+      if (e.target === shutdownOverlay) closeShutdownModal();
+    });
+  }
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+function connectWS() {
+  ws = new WebSocket(`ws://${location.host}`);
+  ws.onopen = () => {
+    document.getElementById('ws-dot').classList.add('connected');
+    document.getElementById('ws-label').textContent = 'live';
+  };
+  ws.onclose = () => {
+    document.getElementById('ws-dot').classList.remove('connected');
+    document.getElementById('ws-label').textContent = 'disconnected';
+    setTimeout(connectWS, 3000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleWS(msg);
+  };
+}
+
+function handleWS(msg) {
+  if (msg.type === 'init') {
+    allStatus = msg.jobStatus || {};
+    renderJobs();
+  } else if (msg.type === 'job_status') {
+    allStatus[msg.jobId] = msg.status;
+    updateJobCard(msg.jobId);
+    updateStats();
+  } else if (msg.type === 'job_progress') {
+    allStatus[msg.jobId] = { ...allStatus[msg.jobId], ...msg };
+    updateJobProgress(msg.jobId, msg);
+    appendLog(msg.jobId, msg.line || '', false);
+  } else if (msg.type === 'job_log') {
+    appendLog(msg.jobId, msg.line, msg.isError);
+  } else if (msg.type === 'jobs_updated') {
+    loadStatus();
+  }
+}
+
+function getJobEngine(job) {
+  return job.syncEngine || (config && config.settings && config.settings.syncEngine) || 'rsync';
+}
+
+function getJobType(job) {
+  return job.jobType || 'filesystem';
+}
+
+function getJobDestination(job) {
+  const engine = getJobEngine(job);
+  if (engine === 'robocopy') {
+    if (job.destPath) return job.destPath;
+    const share = (config.settings && config.settings.smbShare || '').replace(/\\+$/, '');
+    return share ? `${share}\\${job.name}` : '—';
+  }
+  if (config.nas) return `${config.nas.ip}:${config.nas.basePath}/${job.name}`;
+  return '—';
+}
+
+function getJobPrimaryPath(job) {
+  if (getJobType(job) === 'postgresql') {
+    const pg = job.postgres || {};
+    return `${pg.database || 'database'} @ ${pg.host || 'host'}:${pg.port || 5432}`;
+  }
+  return job.sourcePath;
+}
+
+function getJobDumpFormat(job) {
+  return (job && job.postgres && job.postgres.dumpFormat) === 'plain' ? 'plain' : 'custom';
+}
+
+function getJobDumpFormatLabel(job) {
+  return getJobDumpFormat(job) === 'plain' ? '.sql' : '.dump';
+}
+
+function toggleEngineSettings() {
+  const engine = document.getElementById('sync-engine').value;
+  const isRsync = engine === 'rsync';
+  document.getElementById('nas-section').style.display = isRsync ? '' : 'none';
+  document.getElementById('rsync-section').style.display = isRsync ? '' : 'none';
+  document.getElementById('rsync-guide').style.display = isRsync ? '' : 'none';
+  document.getElementById('robocopy-section').style.display = isRsync ? 'none' : '';
+  document.getElementById('robocopy-guide').style.display = isRsync ? 'none' : '';
+}
+
+function toggleJobTypeFields() {
+  const type = document.getElementById('job-type').value || 'filesystem';
+  const isPostgres = type === 'postgresql';
+  document.getElementById('job-source-row').style.display = isPostgres ? 'none' : '';
+  document.getElementById('job-postgres-fields').style.display = isPostgres ? '' : 'none';
+  document.getElementById('job-exclusions-row').style.display = isPostgres ? 'none' : '';
+  toggleJobEngineFields();
+}
+
+function toggleJobEngineFields() {
+  const sel = document.getElementById('job-engine');
+  const engine = sel.value || (config && config.settings && config.settings.syncEngine) || 'rsync';
+  const jobType = document.getElementById('job-type').value || 'filesystem';
+  const isRobocopy = engine === 'robocopy';
+  document.getElementById('job-dest-row').style.display = isRobocopy ? '' : 'none';
+  document.getElementById('job-options-label').textContent = jobType === 'postgresql'
+    ? (isRobocopy ? 'Robocopy Sync Options' : 'Rsync Sync Options')
+    : (isRobocopy ? 'Robocopy Options' : 'Rsync Options');
+  document.getElementById('job-options').placeholder = isRobocopy
+    ? '/E /Z /R:3 /W:5 /MT:8 /MIR'
+    : '-avz --progress --delete';
+}
+
+function appendLog(jobId, line, isError) {
+  const parsed = parseLogLine(line);
+  const entry = {
+    line,
+    isError,
+    ts: parsed.ts || new Date(),
+    text: parsed.text
+  };
+  if (!liveLog[jobId]) liveLog[jobId] = [];
+  liveLog[jobId].push(entry);
+  if (liveLog[jobId].length > 500) liveLog[jobId].shift();
+
+  const logEl = document.getElementById(`log-${jobId}`);
+  if (logEl && logEl.classList.contains('open')) {
+    const prevTs = liveLog[jobId].length > 1 ? liveLog[jobId][liveLog[jobId].length - 2].ts : null;
+    logEl.appendChild(buildLogLineEl(entry, prevTs));
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+
+const LOG_TS_RE = /^\[(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]\s*(.*)$/s;
+
+function parseLogLine(raw) {
+  const m = String(raw).match(LOG_TS_RE);
+  if (m) return { ts: new Date(m[1]), text: m[2] };
+  return { ts: null, text: raw };
+}
+
+function formatLogClock(d) {
+  if (!d || isNaN(d.getTime())) return '—';
+  return d.toLocaleString('id-ID', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+}
+
+function formatLogDiff(ms) {
+  if (ms == null || ms < 0) return '';
+  if (ms < 1000) return `+${Math.round(ms)}ms`;
+  const sec = ms / 1000;
+  if (sec < 60) return `+${sec.toFixed(1)}s`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  if (m < 60) return s > 0 ? `+${m}m ${s}s` : `+${m}m`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return rm > 0 ? `+${h}j ${rm}m` : `+${h}j`;
+}
+
+function buildLogLineEl(entry, prevTs) {
+  const div = document.createElement('div');
+  div.className = 'log-line' + (entry.isError ? ' error' : '');
+  const ts = entry.ts;
+  const diff = prevTs && ts ? formatLogDiff(ts - prevTs) : '';
+  const meta = ts
+    ? `<span class="log-meta"><span class="log-time">${formatLogClock(ts)}</span>${diff ? `<span class="log-delta">${diff}</span>` : ''}</span>`
+    : '';
+  div.innerHTML = meta + (meta ? ' ' : '') + `<span class="log-text">${esc(entry.text)}</span>`;
+  return div;
+}
+
+function renderLogPanel(jobId, entries) {
+  const logEl = document.getElementById(`log-${jobId}`);
+  if (!logEl) return;
+  logEl.innerHTML = '';
+  let prevTs = null;
+  entries.forEach(entry => {
+    logEl.appendChild(buildLogLineEl(entry, prevTs));
+    if (entry.ts) prevTs = entry.ts;
+  });
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function entriesFromRawLines(lines) {
+  const entries = [];
+  let prevTs = null;
+  for (const raw of lines) {
+    const parsed = parseLogLine(raw);
+    const isError = /^\s*ERR:/i.test(parsed.text) || /error|failed/i.test(parsed.text);
+    const entry = {
+      line: raw,
+      isError,
+      ts: parsed.ts || (prevTs ? new Date(prevTs.getTime() + 1) : new Date()),
+      text: parsed.text
+    };
+    entries.push(entry);
+    if (parsed.ts) prevTs = parsed.ts;
+  }
+  return entries;
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────
+async function loadStatus() {
+  const res = await fetch('/api/status');
+  const data = await res.json();
+  config = { ...config, ...data };
+  data.jobs.forEach(j => {
+    if (!allStatus[j.id]) allStatus[j.id] = j.status || { status: 'idle' };
+  });
+  renderJobs();
+  updateStats();
+  loadSettingsForm();
+}
+
+function updateStats() {
+  if (!config) return;
+  const jobs = config.jobs || [];
+  document.getElementById('stat-total').textContent = jobs.length;
+  const running = Object.values(allStatus).filter(s => s.status === 'running').length;
+  document.getElementById('stat-running').textContent = running;
+
+  const successes = jobs.filter(j => {
+    const s = allStatus[j.id];
+    return s && s.status === 'success';
+  });
+  if (successes.length > 0) {
+    const last = successes[successes.length - 1];
+    const s = allStatus[last.id];
+    document.getElementById('stat-success').textContent = last.name;
+    if (s.endTime) {
+      const d = new Date(s.endTime);
+      document.getElementById('stat-success-sub').textContent = d.toLocaleString('id-ID');
+    }
+  } else {
+    document.getElementById('stat-success').textContent = '—';
+    document.getElementById('stat-success-sub').textContent = 'none yet';
+  }
+
+  const nas = config.nas;
+  if (nas && nas.ip) {
+    document.getElementById('stat-nas').textContent = nas.ip;
+    document.getElementById('stat-nas-sub').textContent = `${nas.user}@:${nas.port}`;
+  }
+}
+
+// ── Render jobs ───────────────────────────────────────────────────────────
+function renderJobs() {
+  const grid = document.getElementById('jobs-grid');
+  const jobs = config ? config.jobs : [];
+  if (!jobs || jobs.length === 0) {
+    grid.innerHTML = emptyState(I.archive, 'No backup jobs yet. Click <strong>Add Job</strong> to get started.');
+    return;
+  }
+  grid.innerHTML = jobs.map(job => renderJobCard(job)).join('');
+}
+
+function renderJobCard(job) {
+  const s = allStatus[job.id] || { status: 'idle' };
+  const isRunning = s.status === 'running';
+  const schedLabel = scheduleLabel(job.schedule);
+  const isPostgres = getJobType(job) === 'postgresql';
+  const pg = job.postgres || {};
+
+  return `
+  <div class="job-card ${s.status}" id="card-${job.id}">
+    <div class="job-header">
+      <div class="job-status-dot ${s.status}" id="dot-${job.id}"></div>
+      <div class="job-info">
+        <div class="job-name">${esc(job.name)}</div>
+        <div class="job-path">${esc(getJobPrimaryPath(job))}</div>
+        ${job.description ? `<div class="job-desc">${esc(job.description)}</div>` : ''}
+      </div>
+      <span class="badge ${s.status}" id="badge-${job.id}">${s.status}</span>
+    </div>
+    <div class="job-meta">
+      <div class="job-meta-item">Type: <span>${isPostgres ? 'postgresql' : 'filesystem'}</span></div>
+      <div class="job-meta-item">Engine: <span>${getJobEngine(job)}</span></div>
+      <div class="job-meta-item">Tujuan: <span>${esc(getJobDestination(job))}</span></div>
+      <div class="job-meta-item">Schedule: <span>${schedLabel}</span></div>
+      ${isPostgres ? `<div class="job-meta-item">Format: <span>${getJobDumpFormatLabel(job)}</span></div>` : ''}
+      ${isPostgres ? `<div class="job-meta-item">User DB: <span>${esc(pg.username || '—')}</span></div>` : ''}
+      ${job.lastRun ? `<div class="job-meta-item">Last run: <span>${new Date(job.lastRun).toLocaleString('id-ID')}</span></div>` : ''}
+      ${job.lastDuration ? `<div class="job-meta-item">Duration: <span>${formatDuration(job.lastDuration)}</span></div>` : ''}
+      ${s.phase ? `<div class="job-meta-item">Phase: <span>${esc(s.phase)}</span></div>` : ''}
+      ${s.speed ? `<div class="job-meta-item">Speed: <span>${s.speed}</span></div>` : ''}
+    </div>
+    <div class="job-progress-bar" id="pbar-${job.id}">
+      <div class="job-progress-fill" id="pfill-${job.id}" style="width:${s.progress||0}%"></div>
+    </div>
+    <div class="job-actions">
+      ${isRunning
+        ? `<button class="btn stop" onclick="stopJob('${job.id}')">${btnLabel(I.stop, 'Stop')}</button>`
+        : `<button class="btn primary" onclick="runJob('${job.id}')">${btnLabel(I.play, 'Run Now')}</button>`
+      }
+      <button class="btn" onclick="toggleLog('${job.id}')">${btnLabel(I.clipboard, 'Log')}</button>
+      <button class="btn" onclick="editJob('${job.id}')">${btnLabel(I.pencil, 'Edit')}</button>
+      <button class="btn danger" onclick="deleteJob('${job.id}')">${btnLabel(I.trash, 'Delete')}</button>
+      ${s.eta ? `<span class="job-status-text">ETA: ${s.eta}</span>` : ''}
+      ${s.progress > 0 ? `<span class="job-status-text">${s.progress}%</span>` : ''}
+    </div>
+    <div class="log-panel" id="log-${job.id}"></div>
+  </div>`;
+}
+
+function updateJobCard(jobId) {
+  if (!config) return;
+  const job = config.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  const card = document.getElementById(`card-${jobId}`);
+  if (!card) { renderJobs(); return; }
+  const s = allStatus[jobId] || { status: 'idle' };
+  card.className = `job-card ${s.status}`;
+
+  const dot = document.getElementById(`dot-${jobId}`);
+  if (dot) { dot.className = `job-status-dot ${s.status}`; }
+
+  const badge = document.getElementById(`badge-${jobId}`);
+  if (badge) { badge.className = `badge ${s.status}`; badge.textContent = s.status; }
+
+  const pbar = document.getElementById(`pbar-${jobId}`);
+  if (pbar) pbar.style.display = s.status === 'running' ? 'block' : 'none';
+
+  updateJobProgress(jobId, s);
+}
+
+function updateJobProgress(jobId, p) {
+  const fill = document.getElementById(`pfill-${jobId}`);
+  if (fill && p.progress != null) fill.style.width = p.progress + '%';
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────
+async function runJob(id) {
+  allStatus[id] = { ...allStatus[id], status: 'running', progress: 0 };
+  updateJobCard(id);
+  const res = await fetch(`/api/jobs/${id}/run`, { method: 'POST' });
+  const data = await res.json();
+  if (data.error && !data.success) {
+    toast(data.error, 'err');
+  }
+}
+
+async function stopJob(id) {
+  await fetch(`/api/jobs/${id}/stop`, { method: 'POST' });
+}
+
+async function deleteJob(id) {
+  if (!confirm('Hapus backup job ini?')) return;
+  await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
+  await loadStatus();
+}
+
+function toggleLog(id) {
+  const logEl = document.getElementById(`log-${id}`);
+  const isOpen = logEl.classList.toggle('open');
+  if (isOpen) {
+    const saved = liveLog[id] || [];
+    if (saved.length > 0) {
+      renderLogPanel(id, saved);
+    } else {
+      fetch(`/api/jobs/${id}/log`).then(r => r.json()).then(data => {
+        const entries = entriesFromRawLines(data.lines);
+        liveLog[id] = entries;
+        renderLogPanel(id, entries);
+      });
+    }
+  }
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────
+function loadSettingsForm() {
+  if (!config) return;
+  const nas = config.nas || {};
+  const settings = config.settings || {};
+  document.getElementById('nas-ip').value = nas.ip || '';
+  document.getElementById('nas-user').value = nas.user || '';
+  document.getElementById('nas-port').value = nas.port || '22';
+  document.getElementById('nas-path').value = nas.basePath || '';
+  const nasPw = document.getElementById('nas-password');
+  nasPw.value = '';
+  nasPw.placeholder = nas.passwordSet ? '•••••••• (tersimpan, isi untuk ganti)' : 'Password SSH NAS';
+  const smbPw = document.getElementById('smb-password');
+  smbPw.value = '';
+  smbPw.placeholder = (settings.smbPasswordSet || nas.passwordSet)
+    ? '•••••••• (tersimpan, isi untuk ganti)'
+    : 'Password SMB / NAS user';
+  document.getElementById('sync-engine').value = settings.syncEngine || 'rsync';
+  document.getElementById('rsync-path').value = settings.rsyncPath || '';
+  document.getElementById('ssh-key').value = settings.sshKeyPath || '';
+  document.getElementById('rsync-opts').value = settings.defaultOptions || '-avz --progress --delete';
+  document.getElementById('smb-share').value = settings.smbShare || '';
+  document.getElementById('robocopy-path').value = settings.robocopyPath || 'robocopy';
+  document.getElementById('robocopy-opts').value = settings.robocopyDefaultOptions || '/E /Z /R:3 /W:5 /MT:8 /MIR';
+  toggleEngineSettings();
+  loadSshKeyStatus();
+  showRsyncStatus();
+  const hub = config.hub || {};
+  document.getElementById('hub-enabled').checked = !!hub.enabled;
+  document.getElementById('hub-url').value = hub.url || '';
+  document.getElementById('hub-agent-id').value = hub.agentId || '';
+  const hubKey = document.getElementById('hub-api-key');
+  hubKey.value = '';
+  hubKey.placeholder = (hub.apiKeySet || hub.apiKey) ? '•••••••• (tersimpan)' : 'apiKey dari hub';
+  document.getElementById('hub-log-mode').value = hub.logPushMode || 'summary';
+  loadHubStatus();
+}
+
+async function loadHubStatus() {
+  const el = document.getElementById('hub-status-result');
+  if (!el) return;
+  if (!document.getElementById('hub-enabled').checked) {
+    el.style.display = 'none';
+    return;
+  }
+  try {
+    const res = await fetch('/api/hub/status');
+    const s = await res.json();
+    el.style.display = 'block';
+    if (s.connected) {
+      el.innerHTML = statusLine('ok', `Terhubung ke hub (${esc(s.agentId || '')}) — heartbeat OK`);
+    } else if (s.lastError) {
+      el.innerHTML = statusLine('fail', esc(s.lastError) +
+        ' — pastikan Agent ID dan API Key sama dengan satu baris di Hub → Settings.');
+    } else if (s.enabled && s.hasApiKey) {
+      el.innerHTML = statusLine('warn', 'Menunggu heartbeat… restart SyncGuard jika baru disimpan.');
+    } else {
+      el.innerHTML = statusLine('warn', 'Isi URL, Agent ID, dan API Key dari Hub Settings');
+    }
+  } catch (e) {
+    el.style.display = 'block';
+    el.innerHTML = statusLine('fail', 'Tidak dapat membaca status hub');
+  }
+}
+
+async function showRsyncStatus() {
+  const el = document.getElementById('rsync-detect-status');
+  if (!el) return;
+  const saved = (config?.settings?.rsyncPath || document.getElementById('rsync-path').value || '').trim();
+  if (!saved || saved.toLowerCase() === 'rsync') {
+    el.innerHTML = '<span style="color:var(--text3)">Belum terinstall. Klik <strong>Install cwRsync ke Project</strong> (sekali).</span>';
+    return;
+  }
+  document.getElementById('rsync-path').value = saved;
+  el.innerHTML = `Path: <code style="font-family:var(--mono);color:var(--teal)">${esc(saved)}</code>`;
+  try {
+    const res = await fetch('/api/rsync/status');
+    const data = await res.json();
+    if (data.test?.ok) {
+      el.innerHTML += '<br>' + statusLine('ok', esc(data.test.version || 'OK'));
+    } else if (data.test?.error) {
+      el.innerHTML += '<br>' + statusLine('warn', esc(data.test.error));
+    }
+  } catch (e) {}
+}
+
+async function installCwRsync() {
+  const el = document.getElementById('rsync-detect-status');
+  if (!el) return;
+  el.textContent = 'Menginstall cwRsync ke tools/cwrsync...';
+  try {
+    const res = await fetch('/api/rsync/install', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('rsync-path').value = data.path;
+      el.innerHTML = `Terinstall: <code style="font-family:var(--mono);color:var(--teal)">${esc(data.path)}</code>`;
+      if (data.source) el.innerHTML += `<br><span style="color:var(--text3)">Disalin dari ${esc(data.source)}</span>`;
+      toast('cwRsync terinstall di project', 'ok');
+      await loadStatus();
+      showRsyncStatus();
+    } else {
+      el.innerHTML = statusLine('fail', esc(data.error || 'Install gagal'));
+      toast(data.error || 'Install gagal', 'err');
+    }
+  } catch (e) {
+    el.textContent = 'Gagal install cwRsync.';
+  }
+}
+
+async function testRsync() {
+  const resultEl = document.getElementById('rsync-test-result');
+  resultEl.style.display = 'block';
+  resultEl.className = 'connection-result';
+  setResult(resultEl, '', 'Testing rsync...');
+  await saveSettings();
+  const res = await fetch('/api/rsync/status');
+  const data = await res.json();
+  if (data.test?.ok) {
+    setResult(resultEl, 'ok', (data.test.version || 'Rsync OK') + ' — ' + data.configured);
+  } else {
+    setResult(resultEl, 'fail', data.test?.error || 'Rsync tidak dapat dijalankan');
+  }
+  showRsyncStatus();
+}
+
+async function loadSshKeyStatus() {
+  const el = document.getElementById('ssh-key-status');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/ssh/status');
+    const s = await res.json();
+    const lines = [];
+    if (s.hasDefaultKey || s.resolvedPath) {
+      lines.push(`Private key: <code style="font-family:var(--mono);font-size:11px;color:var(--teal)">${esc(s.resolvedPath || s.privateKey)}</code>`);
+      lines.push(s.hasPublicKey ? 'Public key: tersedia' : 'Public key: belum ada');
+      lines.push(s.keyDeployed ? 'Status NAS: <span style="color:var(--green)">key sudah di-deploy</span>' : 'Status NAS: <span style="color:var(--amber)">belum di-deploy — klik Deploy</span>');
+      if (s.resolvedPath) document.getElementById('ssh-key').value = s.resolvedPath;
+    } else {
+      lines.push('Belum ada SSH key. Klik <strong>Generate SSH Key</strong> lalu <strong>Deploy</strong>.');
+    }
+    el.innerHTML = lines.join('<br>');
+  } catch (e) {
+    el.textContent = 'Gagal memuat status SSH key.';
+  }
+}
+
+async function generateSshKey() {
+  const resultEl = document.getElementById('ssh-deploy-result');
+  resultEl.style.display = 'block';
+  resultEl.className = 'connection-result';
+  setResult(resultEl, '', 'Generating SSH key...');
+  const res = await fetch('/api/ssh/generate-key', { method: 'POST' });
+  const data = await res.json();
+  if (data.ok) {
+    setResult(resultEl, 'ok', data.existed
+      ? 'SSH key sudah ada. Siap untuk deploy.'
+      : 'SSH key baru dibuat. Klik Deploy SSH Key ke NAS.');
+    if (data.privateKey) document.getElementById('ssh-key').value = data.privateKey;
+    loadSshKeyStatus();
+  } else {
+    setResult(resultEl, 'fail', data.error || 'Generate gagal');
+  }
+}
+
+async function deploySshKey() {
+  const resultEl = document.getElementById('ssh-deploy-result');
+  resultEl.style.display = 'block';
+  resultEl.className = 'connection-result';
+  setResult(resultEl, '', 'Deploying public key ke NAS...');
+  await saveNasConfig();
+  const password = document.getElementById('nas-password').value;
+  const res = await fetch('/api/ssh/deploy-key', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: password || undefined })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    let msg = data.message || 'SSH key deployed!';
+    if (data.warning) {
+      setResult(resultEl, 'warn', data.warning);
+    } else {
+      if (data.verified) msg += ' Verifikasi cwRsync SSH: OK.';
+      setResult(resultEl, 'ok', msg);
+    }
+    document.getElementById('nas-password').value = '';
+    loadSshKeyStatus();
+    loadStatus();
+  } else {
+    setResult(resultEl, 'fail', data.error || 'Deploy gagal');
+  }
+}
+
+async function saveNasConfig() {
+  const cfg = await (await fetch('/api/config')).json();
+  const nasUpdate = {
+    ip: document.getElementById('nas-ip').value.trim(),
+    user: document.getElementById('nas-user').value.trim(),
+    port: parseInt(document.getElementById('nas-port').value) || 22,
+    basePath: document.getElementById('nas-path').value.trim()
+  };
+  const pw = document.getElementById('nas-password').value;
+  if (pw) nasUpdate.password = pw;
+  cfg.nas = { ...cfg.nas, ...nasUpdate };
+  await fetch('/api/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nas: nasUpdate }) });
+  toast('NAS config saved!', 'ok');
+  loadStatus();
+}
+
+async function saveSettings() {
+  const cfg = await (await fetch('/api/config')).json();
+  const settingsUpdate = {
+    syncEngine: document.getElementById('sync-engine').value,
+    rsyncPath: document.getElementById('rsync-path').value.trim() || 'tools/cwrsync/bin/rsync.exe',
+    sshKeyPath: document.getElementById('ssh-key').value.trim(),
+    defaultOptions: document.getElementById('rsync-opts').value.trim() || '-avz --progress --delete',
+    robocopyPath: document.getElementById('robocopy-path').value.trim() || 'robocopy',
+    robocopyDefaultOptions: document.getElementById('robocopy-opts').value.trim() || '/E /Z /R:3 /W:5 /MT:8 /MIR',
+    smbShare: document.getElementById('smb-share').value.trim()
+  };
+  const smbPw = document.getElementById('smb-password').value;
+  if (smbPw) settingsUpdate.smbPassword = smbPw;
+  const hubUpdate = {
+    enabled: document.getElementById('hub-enabled').checked,
+    url: document.getElementById('hub-url').value.trim(),
+    agentId: document.getElementById('hub-agent-id').value.trim(),
+    logPushMode: document.getElementById('hub-log-mode').value
+  };
+  const hubKey = document.getElementById('hub-api-key').value.trim();
+  if (hubKey) hubUpdate.apiKey = hubKey;
+  await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: settingsUpdate, hub: hubUpdate })
+  });
+  toast('Settings saved!', 'ok');
+  loadStatus();
+  loadHubStatus();
+}
+
+async function testConnection(engine) {
+  const eng = engine || document.getElementById('sync-engine').value || 'rsync';
+  const resultEl = eng === 'robocopy'
+    ? document.getElementById('smb-result')
+    : document.getElementById('conn-result');
+  setResult(resultEl, '', eng === 'robocopy' ? 'Testing SMB access...' : 'Testing SSH connection...');
+  if (eng === 'robocopy') await saveSettings();
+  else await saveNasConfig();
+  const res = await fetch(`/api/test-connection?engine=${eng}`);
+  const data = await res.json();
+  if (data.ok) {
+    const auth = data.authMethod === 'ssh-key' ? ' (SSH key)' : ' (password)';
+    setResult(resultEl, 'ok', eng === 'robocopy'
+      ? 'SMB share accessible!'
+      : 'Connection successful! NAS reachable.' + auth);
+  } else {
+    setResult(resultEl, 'fail', data.error || 'Connection failed');
+  }
+}
+
+// ── Add/Edit Job Modal ────────────────────────────────────────────────────
+function openAddJobModal(job = null) {
+  document.getElementById('modal-job-title').textContent = job ? 'Edit Job' : 'Add Backup Job';
+  document.getElementById('edit-job-id').value = job ? job.id : '';
+  document.getElementById('job-type').value = job ? getJobType(job) : 'filesystem';
+  document.getElementById('job-name').value = job ? job.name : '';
+  document.getElementById('job-source').value = job ? job.sourcePath : '';
+  document.getElementById('job-desc').value = job ? (job.description || '') : '';
+  document.getElementById('job-options').value = job ? (job.options || '') : '';
+  document.getElementById('job-exclusions').value = job ? (job.exclusions || []).join('\n') : '';
+  document.getElementById('job-engine').value = job ? (job.syncEngine || '') : '';
+  document.getElementById('job-dest').value = job ? (job.destPath || '') : '';
+  document.getElementById('job-pg-host').value = job?.postgres?.host || '';
+  document.getElementById('job-pg-port').value = job?.postgres?.port || '5432';
+  document.getElementById('job-pg-database').value = job?.postgres?.database || '';
+  document.getElementById('job-pg-username').value = job?.postgres?.username || '';
+  document.getElementById('job-pg-password').value = '';
+  document.getElementById('job-pg-password').placeholder = job?.postgres?.passwordSet
+    ? '•••••••• (tersimpan, isi untuk ganti)'
+    : 'Isi password PostgreSQL';
+  document.getElementById('job-pg-dump-path').value = job?.postgres?.pgDumpPath || '';
+  document.getElementById('job-pg-dump-format').value = getJobDumpFormat(job);
+  document.getElementById('job-pg-retention').value = job?.postgres?.retentionCount || '3';
+  document.getElementById('job-pg-extra-options').value = job?.postgres?.extraOptions || '';
+  const pgResult = document.getElementById('postgres-test-result');
+  pgResult.style.display = 'none';
+  pgResult.textContent = '';
+  toggleJobTypeFields();
+  toggleJobEngineFields();
+
+  const sched = job ? (job.schedule || 'manual') : 'manual';
+  const sel = document.getElementById('job-schedule');
+  const options = Array.from(sel.options).map(o => o.value);
+  if (options.includes(sched)) {
+    sel.value = sched;
+  } else {
+    sel.value = 'custom';
+    document.getElementById('job-cron').value = sched;
+    document.getElementById('custom-cron-row').style.display = '';
+  }
+
+  document.getElementById('modal-addjob').classList.add('open');
+  document.getElementById('job-name').focus();
+}
+
+function closeAddJobModal() {
+  document.getElementById('modal-addjob').classList.remove('open');
+}
+
+document.getElementById('job-schedule').addEventListener('change', function() {
+  document.getElementById('custom-cron-row').style.display = this.value === 'custom' ? '' : 'none';
+});
+
+async function saveJob() {
+  const jobType = document.getElementById('job-type').value || 'filesystem';
+  const name = document.getElementById('job-name').value.trim();
+  const source = document.getElementById('job-source').value.trim();
+  if (!name) { toast('Job name wajib diisi', 'err'); return; }
+  if (jobType === 'filesystem' && !source) { toast('Source Path wajib diisi', 'err'); return; }
+  if (jobType === 'postgresql') {
+    if (!document.getElementById('job-pg-host').value.trim() ||
+        !document.getElementById('job-pg-database').value.trim() ||
+        !document.getElementById('job-pg-username').value.trim()) {
+      toast('Host, database, dan username PostgreSQL wajib diisi', 'err');
+      return;
+    }
+  }
+
+  let schedule = document.getElementById('job-schedule').value;
+  if (schedule === 'custom') schedule = document.getElementById('job-cron').value.trim() || 'manual';
+
+  const payload = {
+    jobType,
+    name,
+    sourcePath: jobType === 'filesystem' ? source : '',
+    description: document.getElementById('job-desc').value.trim(),
+    schedule,
+    syncEngine: document.getElementById('job-engine').value,
+    destPath: document.getElementById('job-dest').value.trim(),
+    options: document.getElementById('job-options').value.trim(),
+    exclusions: jobType === 'filesystem'
+      ? document.getElementById('job-exclusions').value.split('\n').map(s => s.trim()).filter(Boolean)
+      : [],
+    postgres: jobType === 'postgresql' ? {
+      host: document.getElementById('job-pg-host').value.trim(),
+      port: document.getElementById('job-pg-port').value.trim() || '5432',
+      database: document.getElementById('job-pg-database').value.trim(),
+      username: document.getElementById('job-pg-username').value.trim(),
+      password: document.getElementById('job-pg-password').value,
+      pgDumpPath: document.getElementById('job-pg-dump-path').value.trim(),
+      dumpFormat: document.getElementById('job-pg-dump-format').value || 'custom',
+      retentionCount: document.getElementById('job-pg-retention').value.trim() || '3',
+      extraOptions: document.getElementById('job-pg-extra-options').value.trim()
+    } : null
+  };
+
+  const editId = document.getElementById('edit-job-id').value;
+  if (editId) {
+    await fetch(`/api/jobs/${editId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Job updated!', 'ok');
+  } else {
+    await fetch('/api/jobs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast('Job added!', 'ok');
+  }
+  closeAddJobModal();
+  await loadStatus();
+}
+
+async function testPostgresJob() {
+  const resultEl = document.getElementById('postgres-test-result');
+  resultEl.style.display = 'block';
+  resultEl.className = 'connection-result';
+  setResult(resultEl, '', 'Testing PostgreSQL connection...');
+
+  const payload = {
+    id: document.getElementById('edit-job-id').value || undefined,
+    name: document.getElementById('job-name').value.trim() || 'postgres-job',
+    jobType: 'postgresql',
+    syncEngine: document.getElementById('job-engine').value,
+    destPath: document.getElementById('job-dest').value.trim(),
+    options: document.getElementById('job-options').value.trim(),
+    schedule: document.getElementById('job-schedule').value,
+    postgres: {
+      host: document.getElementById('job-pg-host').value.trim(),
+      port: document.getElementById('job-pg-port').value.trim() || '5432',
+      database: document.getElementById('job-pg-database').value.trim(),
+      username: document.getElementById('job-pg-username').value.trim(),
+      password: document.getElementById('job-pg-password').value,
+      pgDumpPath: document.getElementById('job-pg-dump-path').value.trim(),
+      dumpFormat: document.getElementById('job-pg-dump-format').value || 'custom',
+      retentionCount: document.getElementById('job-pg-retention').value.trim() || '3',
+      extraOptions: document.getElementById('job-pg-extra-options').value.trim()
+    }
+  };
+
+  const res = await fetch('/api/postgres/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.ok) {
+    setResult(resultEl, 'ok', `Koneksi PostgreSQL berhasil${data.version ? ` — ${data.version}` : ''}`);
+  } else {
+    setResult(resultEl, 'fail', data.error || 'Koneksi PostgreSQL gagal');
+  }
+}
+
+function editJob(id) {
+  if (!config) return;
+  const job = config.jobs.find(j => j.id === id);
+  if (job) openAddJobModal(job);
+}
+
+// ── Logs page ─────────────────────────────────────────────────────────────
+function formatLogLineHtml(raw, prevTs) {
+  const parsed = parseLogLine(raw);
+  const isError = /^\s*ERR:/i.test(parsed.text) || /error|failed/i.test(parsed.text);
+  const ts = parsed.ts;
+  const diff = prevTs && ts ? formatLogDiff(ts - prevTs) : '';
+  const meta = ts
+    ? `<span class="log-meta"><span class="log-time">${formatLogClock(ts)}</span>${diff ? `<span class="log-delta">${diff}</span>` : ''}</span>`
+    : '';
+  return { html: meta + `<span class="log-text">${esc(parsed.text)}</span>`, ts: ts || prevTs, isError };
+}
+
+async function loadAllLogs() {
+  if (!config) return;
+  const container = document.getElementById('logs-container');
+  if (!config.jobs || config.jobs.length === 0) {
+    container.innerHTML = emptyState(I.clipboard, 'No jobs configured.');
+    return;
+  }
+  container.innerHTML = '';
+  for (const job of config.jobs) {
+    const res = await fetch(`/api/jobs/${job.id}/log?last=300`);
+    const data = await res.json();
+    const s = allStatus[job.id] || {};
+    let prevTs = null;
+    const linesHtml = data.lines.map(l => {
+      const f = formatLogLineHtml(l, prevTs);
+      if (f.ts) prevTs = f.ts;
+      return `<div class="full-log-line ${f.isError ? 'err' : ''}">${f.html}</div>`;
+    }).join('');
+    const div = document.createElement('div');
+    div.className = 'logs-page-log';
+    div.innerHTML = `
+      <div class="logs-page-header" onclick="toggleFullLog('${job.id}')">
+        <span style="font-weight:500">${esc(job.name)}</span>
+        <span style="display:flex;align-items:center;gap:10px">
+          <span class="badge ${s.status||'idle'}">${s.status||'idle'}</span>
+          <span style="font-size:12px;color:var(--text3);display:inline-flex;align-items:center;gap:4px">${data.lines.length} lines ${I.chevron}</span>
+        </span>
+      </div>
+      <div class="full-log" id="fulllog-${job.id}">${linesHtml}</div>`;
+    container.appendChild(div);
+  }
+}
+
+function toggleFullLog(id) {
+  document.getElementById(`fulllog-${id}`).classList.toggle('open');
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach((t, i) => {
+    t.classList.toggle('active', ['dashboard','settings','logs'][i] === name);
+  });
+  if (name === 'logs') loadAllLogs();
+  if (name === 'settings') loadServerInfo();
+}
+
+function scheduleLabel(s) {
+  const map = { 'manual': 'Manual', '0 * * * *': 'Hourly', '0 2 * * *': 'Daily 02:00', '0 3 * * 0': 'Weekly', '0 4 1 * *': 'Monthly' };
+  return map[s] || (s || 'Manual');
+}
+
+function formatDuration(s) {
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
+  return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+initStaticIcons();
+initTheme();
+connectWS();
+loadStatus();
+loadServerInfo();
+setInterval(loadStatus, 30000);
+setInterval(loadServerInfo, 15000);
+
+async function loadServerInfo() {
+  try {
+    const res = await fetch('/api/server-info');
+    if (!res.ok) return;
+    const info = await res.json();
+    const pid = info.pid || '—';
+    const port = info.port || 7432;
+    const up = info.uptime != null ? formatDuration(info.uptime) : '—';
+    const el = document.getElementById('server-info-panel');
+    if (el) {
+      el.innerHTML = `Berjalan · PID <span style="color:var(--green)">${pid}</span> · port ${port} · uptime ${up}`;
+    }
+    const fp = document.getElementById('footer-pid');
+    const fport = document.getElementById('footer-port');
+    const fu = document.getElementById('footer-uptime');
+    if (fp) fp.textContent = pid;
+    if (fport) fport.textContent = port;
+    if (fu) fu.textContent = up;
+  } catch (e) {}
+}
+
+function openShutdownModal() {
+  document.getElementById('modal-shutdown')?.classList.add('open');
+}
+
+function closeShutdownModal() {
+  document.getElementById('modal-shutdown')?.classList.remove('open');
+}
+
+function setShutdownButtonsDisabled(disabled) {
+  document.querySelectorAll('.btn.shutdown').forEach(btn => { btn.disabled = disabled; });
+}
+
+async function confirmShutdownServer() {
+  closeShutdownModal();
+  setShutdownButtonsDisabled(true);
+  document.querySelectorAll('.btn.shutdown .btn-label').forEach(el => {
+    el.textContent = 'Stopping...';
+  });
+  try {
+    await fetch('/api/shutdown', { method: 'POST' });
+    toast('Server dihentikan. Tutup tab ini atau jalankan SyncGuard.exe lagi.', 'ok');
+    document.getElementById('ws-label').textContent = 'offline';
+    document.getElementById('ws-dot').classList.remove('connected');
+    setTimeout(() => window.close(), 800);
+  } catch (e) {
+    toast('Server mungkin sudah berhenti.', 'err');
+    setShutdownButtonsDisabled(false);
+    document.querySelectorAll('.btn.shutdown .btn-label').forEach(el => {
+      el.textContent = 'Stop Server';
+    });
+    initStaticIcons();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('modal-shutdown')?.classList.contains('open')) {
+    closeShutdownModal();
+  }
+});
+
+function applyTheme(theme) {
+  const nextTheme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', nextTheme);
+  localStorage.setItem('syncguard_agent_theme', nextTheme);
+  const btn = document.getElementById('btn-theme');
+  if (btn) btn.textContent = nextTheme === 'light' ? 'Dark mode' : 'Light mode';
+}
+
+function initTheme() {
+  applyTheme(localStorage.getItem('syncguard_agent_theme') || 'dark');
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'light' ? 'dark' : 'light');
+}
+</script>
+</body>
+</html>

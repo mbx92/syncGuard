@@ -1,0 +1,16 @@
+{
+  "port": 7443,
+  "publicUrl": "",
+  "adminToken": "Admin123!",
+  "retention": {
+    "runsDays": 90,
+    "logTailLinesPerRun": 200,
+    "logTailRunsKept": 50,
+    "maxDbSizeMb": 500
+  },
+  "ingest": {
+    "maxLinesPerMinutePerAgent": 120,
+    "maxLineLength": 500,
+    "dropDuplicateWindowSec": 30
+  }
+}
