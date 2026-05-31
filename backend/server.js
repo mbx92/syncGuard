@@ -166,8 +166,22 @@ function sanitizeConfig(config) {
     nas: ssh.sanitizeNasForClient(config.nas),
     settings: ssh.sanitizeSettingsForClient(config.settings),
     hub: sanitizeHubForClient(config.hub),
-    jobs: (config.jobs || []).map(postgresUtil.sanitizeJobForClient)
+    jobs: (config.jobs || []).map(postgresUtil.sanitizeJobForClient),
+    nasProfiles: (config.nasProfiles || []).map(sanitizeNasProfile)
   };
+}
+
+function sanitizeNasProfile(profile) {
+  return {
+    ...profile,
+    passwordSet: !!(profile.password && String(profile.password).length > 0),
+    password: undefined
+  };
+}
+
+function sanitizeJobNas(job) {
+  if (!job) return job;
+  return { ...job, nasProfileId: job.nasProfileId || undefined };
 }
 
 function getJobType(job) {
@@ -181,7 +195,7 @@ function getJobRuntimeSource(job) {
 }
 
 function sanitizeJobForStatus(job) {
-  return postgresUtil.sanitizeJobForClient(job);
+  return sanitizeJobNas(postgresUtil.sanitizeJobForClient(job));
 }
 
 function normalizeJobPayload(body, config, existingJob = null) {
@@ -232,7 +246,8 @@ function normalizeJobPayload(body, config, existingJob = null) {
   return {
     ...base,
     sourcePath: body.sourcePath,
-    postgres: null
+    postgres: null,
+    nasProfileId: (body.nasProfileId || '').trim() || undefined
   };
 }
 
@@ -519,7 +534,7 @@ async function runPostgresJob(jobId, job, config, startTime) {
       windowsHide: true,
       cwd: syncCmd.cwd,
       env: syncCmd.engine === 'rsync'
-        ? { ...process.env, ...rsyncUtil.getRsyncRunEnv(config) }
+        ? { ...process.env, ...rsyncUtil.getRsyncRunEnv(config, job) }
         : process.env
     });
 
@@ -569,22 +584,26 @@ async function runJob(jobId) {
 
   const engine = getJobSyncEngine(job, config);
   if (engine === 'rsync') {
-    const keyPath = ssh.resolveSshKeyPath(config);
-    if (!keyPath) {
-      return {
-        error: 'SSH key belum dikonfigurasi. Isi password NAS lalu klik "Deploy SSH Key ke NAS", atau set path ke private key.'
-      };
-    }
     const rsyncPath = rsyncUtil.resolveRsyncPath(config.settings);
     const test = await rsyncUtil.testRsyncBinary(config.settings.rsyncPath);
     if (!test.ok) {
       return { error: `Rsync tidak ditemukan di ${rsyncPath}. Jalankan install-cwrsync.bat` };
     }
-    const sshTest = await rsyncUtil.testRsyncSshAuth(config);
-    if (!sshTest.ok) {
-      return {
-        error: `SSH auth gagal (${config.nas.user}@${config.nas.ip}:${config.nas.port}): ${sshTest.error}. Deploy ulang SSH key untuk user "${config.nas.user}" atau pastikan password NAS benar.`
-      };
+
+    const hasPerJobNas = !!(job.nasProfileId && (config.nasProfiles || []).find(p => p.id === job.nasProfileId));
+    if (!hasPerJobNas) {
+      const keyPath = ssh.resolveSshKeyPath(config);
+      if (!keyPath) {
+        return {
+          error: 'SSH key belum dikonfigurasi. Isi password NAS lalu klik "Deploy SSH Key ke NAS", atau set path ke private key.'
+        };
+      }
+      const sshTest = await rsyncUtil.testRsyncSshAuth(config);
+      if (!sshTest.ok) {
+        return {
+          error: `SSH auth gagal (${config.nas.user}@${config.nas.ip}:${config.nas.port}): ${sshTest.error}. Deploy ulang SSH key untuk user "${config.nas.user}" atau pastikan password NAS benar.`
+        };
+      }
     }
   }
 
@@ -631,7 +650,7 @@ async function runJob(jobId) {
       windowsHide: true,
       cwd: syncCmd.cwd,
       env: engine === 'rsync'
-        ? { ...process.env, ...rsyncUtil.getRsyncRunEnv(config) }
+        ? { ...process.env, ...rsyncUtil.getRsyncRunEnv(config, job) }
         : process.env
     });
 
@@ -761,6 +780,71 @@ app.post('/api/config', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── NAS Profiles CRUD ───────────────────────────────────────────────────────
+
+function generateProfileId() {
+  return 'np_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+app.get('/api/nas-profiles', (req, res) => {
+  const config = loadConfig();
+  res.json({ profiles: (config.nasProfiles || []).map(sanitizeNasProfile) });
+});
+
+app.post('/api/nas-profiles', (req, res) => {
+  const { name, ip, port, user, basePath, password } = req.body || {};
+  if (!name || !ip || !user) {
+    return res.status(400).json({ error: 'name, ip, dan user wajib diisi' });
+  }
+  const profile = {
+    id: generateProfileId(),
+    name,
+    ip,
+    port: parseInt(port, 10) || 22,
+    user,
+    basePath: basePath || '',
+    password: password || ''
+  };
+  const config = loadConfig();
+  config.nasProfiles = [...(config.nasProfiles || []), profile];
+  saveConfig(config);
+  res.json({ ok: true, profile: sanitizeNasProfile(profile) });
+});
+
+app.put('/api/nas-profiles/:id', (req, res) => {
+  const config = loadConfig();
+  const idx = (config.nasProfiles || []).findIndex(p => p.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Profile not found' });
+  const existing = config.nasProfiles[idx];
+  const { name, ip, port, user, basePath, password } = req.body || {};
+  const updated = {
+    ...existing,
+    name: name || existing.name,
+    ip: ip || existing.ip,
+    port: parseInt(port, 10) || existing.port || 22,
+    user: user || existing.user,
+    basePath: basePath !== undefined ? basePath : existing.basePath
+  };
+  if (password !== undefined && password !== '') {
+    updated.password = password;
+  }
+  config.nasProfiles[idx] = updated;
+  saveConfig(config);
+  res.json({ ok: true, profile: sanitizeNasProfile(updated) });
+});
+
+app.delete('/api/nas-profiles/:id', (req, res) => {
+  const config = loadConfig();
+  const idx = (config.nasProfiles || []).findIndex(p => p.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Profile not found' });
+  config.nasProfiles.splice(idx, 1);
+  config.jobs.forEach(j => {
+    if (j.nasProfileId === req.params.id) delete j.nasProfileId;
+  });
+  saveConfig(config);
+  res.json({ ok: true });
+});
+
 // GET /api/status
 app.get('/api/status', (req, res) => {
   const config = loadConfig();
@@ -772,7 +856,8 @@ app.get('/api/status', (req, res) => {
     jobs,
     nas: ssh.sanitizeNasForClient(config.nas),
     settings: ssh.sanitizeSettingsForClient(config.settings),
-    hub: sanitizeHubForClient(config.hub)
+    hub: sanitizeHubForClient(config.hub),
+    nasProfiles: (config.nasProfiles || []).map(sanitizeNasProfile)
   });
 });
 

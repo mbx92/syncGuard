@@ -178,6 +178,23 @@ function normalizeLocalSource(sourcePath, rsyncExecutable) {
   return p;
 }
 
+function getEffectiveNas(job, config) {
+  const profileId = job?.nasProfileId;
+  if (profileId && config.nasProfiles) {
+    const profile = config.nasProfiles.find(p => p.id === profileId);
+    if (profile) {
+      const merged = { ...config.nas };
+      if (profile.ip) merged.ip = profile.ip;
+      if (profile.port) merged.port = profile.port;
+      if (profile.user) merged.user = profile.user;
+      if (profile.basePath) merged.basePath = profile.basePath;
+      if (profile.password) merged.password = profile.password;
+      return merged;
+    }
+  }
+  return config.nas;
+}
+
 function buildRemoteDest(nas, jobName) {
   const base = (nas.basePath || '').replace(/\\/g, '/').replace(/\/+$/, '');
   const safeName = jobName.trim().replace(/\\/g, '/');
@@ -228,8 +245,8 @@ function buildSshTransport(nas, sshKeyPath, rsyncExecutable, opts = {}) {
   return parts.map(p => (/\s/.test(p) ? `"${p}"` : p)).join(' ');
 }
 
-function getRsyncSshEnv(config) {
-  const password = config.nas?.password;
+function getRsyncSshEnv(nas) {
+  const password = nas?.password;
   if (!password) return {};
 
   const askpass = path.join(__dirname, 'tools/ssh-askpass.cmd');
@@ -264,7 +281,7 @@ function testRsyncSshAuth(config) {
   const opts = {
     windowsHide: true,
     timeout: 20000,
-    env: { ...process.env, ...getRsyncSshEnv(config) }
+    env: { ...process.env, ...getRsyncSshEnv(config.nas) }
   };
   if (cwd) opts.cwd = cwd;
 
@@ -285,6 +302,7 @@ function testRsyncSshAuth(config) {
 }
 
 function buildRsyncJobArgs(job, config) {
+  const nas = getEffectiveNas(job, config);
   const resolved = resolveRsyncPath(config.settings);
   const keyPath = ssh.resolveSshKeyPath(config) || '';
 
@@ -293,21 +311,22 @@ function buildRsyncJobArgs(job, config) {
     .filter(Boolean);
 
   const rsyncArgs = [...options];
-  rsyncArgs.push('-e', buildSshTransport(config.nas, keyPath, resolved, { password: config.nas?.password }));
+  rsyncArgs.push('-e', buildSshTransport(nas, keyPath, resolved, { password: nas.password }));
 
   if (job.exclusions?.length) {
     job.exclusions.forEach(ex => rsyncArgs.push(`--exclude=${ex}`));
   }
 
   const source = normalizeLocalSource(job.sourcePath, resolved);
-  const dest = buildRemoteDest(config.nas, job.name);
+  const dest = buildRemoteDest(nas, job.name);
   rsyncArgs.push(source, dest);
 
   return buildRsyncSpawn(config.settings.rsyncPath, rsyncArgs);
 }
 
-function getRsyncRunEnv(config) {
-  return getRsyncSshEnv(config);
+function getRsyncRunEnv(config, job) {
+  const nas = job ? getEffectiveNas(job, config) : config.nas;
+  return getRsyncSshEnv(nas);
 }
 
 module.exports = {
@@ -328,5 +347,6 @@ module.exports = {
   getRsyncRunEnv,
   normalizeLocalSource,
   buildRemoteDest,
-  toCygwinPath
+  toCygwinPath,
+  getEffectiveNas
 };

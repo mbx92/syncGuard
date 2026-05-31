@@ -835,6 +835,16 @@
       <div class="connection-result" id="ssh-deploy-result"></div>
     </div>
 
+    <div class="settings-section">
+      <div class="settings-title">NAS Profiles <span style="font-weight:400;text-transform:none;color:var(--text3)">— override NAS per job</span></div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6">Buat profile NAS untuk job yang perlu backup ke server berbeda dari global config.</p>
+      <div id="nas-profile-list" style="margin-bottom:12px">
+        <p style="font-size:12px;color:var(--text3)">Memuat...</p>
+      </div>
+      <button class="btn" onclick="openNasProfileModal()">+ Tambah NAS Profile</button>
+      <div class="connection-result" id="nas-profile-result"></div>
+    </div>
+
     <div class="settings-section" id="rsync-section">
       <div class="settings-title">Rsync Settings</div>
       <div class="form-row">
@@ -1100,6 +1110,12 @@
       <label class="modal-label">Destination Path (UNC)</label>
       <input class="form-input mono" id="job-dest" placeholder="\\192.168.1.100\backup\JobName (kosongkan = auto)">
     </div>
+    <div class="modal-form-row" id="job-nas-profile-row">
+      <label class="modal-label">NAS Profile</label>
+      <select class="form-select" id="job-nas-profile">
+        <option value="">(Default — global NAS config)</option>
+      </select>
+    </div>
     <div class="modal-form-row">
       <label class="modal-label">Schedule</label>
       <select class="form-select" id="job-schedule">
@@ -1152,6 +1168,45 @@
       <button type="button" class="btn shutdown" id="btn-shutdown-confirm" onclick="confirmShutdownServer()">
         <span class="btn-label">Stop Server</span>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ NAS PROFILE MODAL ══ -->
+<div class="modal-overlay" id="modal-nas-profile">
+  <div class="modal" style="max-width:450px">
+    <div class="modal-title">
+      <span id="modal-nas-profile-title">Tambah NAS Profile</span>
+      <button class="modal-close" onclick="closeNasProfileModal()" title="Tutup" aria-label="Tutup"></button>
+    </div>
+    <input type="hidden" id="edit-nas-profile-id">
+    <div class="modal-form-row">
+      <label class="modal-label">Nama Profile *</label>
+      <input class="form-input mono" id="np-name" placeholder="NAS Kantor">
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">NAS IP *</label>
+      <input class="form-input mono" id="np-ip" placeholder="10.0.0.1">
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">SSH Port</label>
+      <input class="form-input mono" id="np-port" placeholder="22">
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">SSH User *</label>
+      <input class="form-input mono" id="np-user" placeholder="admin">
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">Base Path (remote)</label>
+      <input class="form-input mono" id="np-basepath" placeholder="/volume1/backup">
+    </div>
+    <div class="modal-form-row">
+      <label class="modal-label">Password</label>
+      <input class="form-input" id="np-password" type="password" placeholder="Isi untuk set/ganti">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeNasProfileModal()">Batal</button>
+      <button class="btn primary" onclick="saveNasProfile()">Simpan Profile</button>
     </div>
   </div>
 </div>
@@ -1353,7 +1408,9 @@ function toggleJobEngineFields() {
   const engine = sel.value || (config && config.settings && config.settings.syncEngine) || 'rsync';
   const jobType = document.getElementById('job-type').value || 'filesystem';
   const isRobocopy = engine === 'robocopy';
+  const isRsync = engine === 'rsync' || (!isRobocopy && engine === '');
   document.getElementById('job-dest-row').style.display = isRobocopy ? '' : 'none';
+  document.getElementById('job-nas-profile-row').style.display = isRobocopy ? 'none' : '';
   document.getElementById('job-options-label').textContent = jobType === 'postgresql'
     ? (isRobocopy ? 'Robocopy Sync Options' : 'Rsync Sync Options')
     : (isRobocopy ? 'Robocopy Options' : 'Rsync Options');
@@ -1462,7 +1519,9 @@ async function loadStatus() {
   });
   renderJobs();
   updateStats();
+  window.nasProfiles = data.nasProfiles || [];
   loadSettingsForm();
+  renderNasProfiles();
 }
 
 function updateStats() {
@@ -1828,6 +1887,122 @@ async function saveNasConfig() {
   loadStatus();
 }
 
+// ── NAS Profiles ──────────────────────────────────────────────────────────
+
+let nasProfileDeleteTarget = null;
+
+function renderNasProfiles() {
+  const list = document.getElementById('nas-profile-list');
+  const profiles = window.nasProfiles || [];
+  if (!profiles.length) {
+    list.innerHTML = '<p style="font-size:12px;color:var(--text3)">Belum ada NAS profile. Buat profile untuk override NAS config per job.</p>';
+    return;
+  }
+  list.innerHTML = profiles.map(p => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <div>
+        <div style="font-weight:600;font-size:13px">${esc(p.name)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(p.user)}@${esc(p.ip)}:${p.port} &mdash; ${esc(p.basePath || '-')}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" style="padding:4px 10px;font-size:11px" onclick="openNasProfileModal('${p.id}')">Edit</button>
+        <button class="btn" style="padding:4px 10px;font-size:11px" onclick="confirmDeleteNasProfile('${p.id}')">Hapus</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function populateNasProfileDropdown(sel, selectedId) {
+  const profiles = window.nasProfiles || [];
+  const current = sel.value;
+  sel.innerHTML = '<option value="">(Default — global NAS config)</option>' +
+    profiles.map(p => `<option value="${p.id}" ${(p.id === selectedId || p.id === current) ? 'selected' : ''}>${esc(p.name)} (${esc(p.user)}@${esc(p.ip)})</option>`).join('');
+}
+
+function openNasProfileModal(profileId) {
+  nasProfileDeleteTarget = null;
+  document.getElementById('edit-nas-profile-id').value = '';
+  document.getElementById('np-name').value = '';
+  document.getElementById('np-ip').value = '';
+  document.getElementById('np-port').value = '';
+  document.getElementById('np-user').value = '';
+  document.getElementById('np-basepath').value = '';
+  document.getElementById('np-password').value = '';
+  document.getElementById('np-password').placeholder = 'Isi untuk set/ganti';
+
+  if (profileId) {
+    const profiles = window.nasProfiles || [];
+    const p = profiles.find(x => x.id === profileId);
+    if (p) {
+      document.getElementById('modal-nas-profile-title').textContent = 'Edit NAS Profile';
+      document.getElementById('edit-nas-profile-id').value = p.id;
+      document.getElementById('np-name').value = p.name || '';
+      document.getElementById('np-ip').value = p.ip || '';
+      document.getElementById('np-port').value = p.port || '';
+      document.getElementById('np-user').value = p.user || '';
+      document.getElementById('np-basepath').value = p.basePath || '';
+      document.getElementById('np-password').placeholder = p.passwordSet ? '•••••••• (tersimpan, isi untuk ganti)' : 'Isi untuk set/ganti';
+    }
+  } else {
+    document.getElementById('modal-nas-profile-title').textContent = 'Tambah NAS Profile';
+  }
+
+  document.getElementById('modal-nas-profile').classList.add('open');
+}
+
+function closeNasProfileModal() {
+  document.getElementById('modal-nas-profile').classList.remove('open');
+  document.getElementById('nas-profile-result').style.display = 'none';
+}
+
+async function saveNasProfile() {
+  const id = document.getElementById('edit-nas-profile-id').value;
+  const name = document.getElementById('np-name').value.trim();
+  const ip = document.getElementById('np-ip').value.trim();
+  const user = document.getElementById('np-user').value.trim();
+  const port = document.getElementById('np-port').value.trim();
+  const basePath = document.getElementById('np-basepath').value.trim();
+  const password = document.getElementById('np-password').value;
+
+  const resultEl = document.getElementById('nas-profile-result');
+  resultEl.style.display = 'block';
+  resultEl.className = 'connection-result';
+
+  if (!name || !ip || !user) {
+    resultEl.textContent = 'Nama, IP, dan User wajib diisi.';
+    resultEl.className = 'connection-result error';
+    return;
+  }
+
+  const payload = { name, ip, user, port: port || '22', basePath, password };
+  const url = id ? `/api/nas-profiles/${encodeURIComponent(id)}` : '/api/nas-profiles';
+  const method = id ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { resultEl.textContent = data.error || 'Gagal'; resultEl.className = 'connection-result error'; return; }
+    resultEl.textContent = id ? 'Profile diupdate!' : 'Profile dibuat!';
+    resultEl.className = 'connection-result success';
+    closeNasProfileModal();
+    await loadStatus();
+  } catch (e) { resultEl.textContent = 'Gagal menyimpan profile.'; resultEl.className = 'connection-result error'; }
+}
+
+async function confirmDeleteNasProfile(profileId) {
+  if (!confirm('Hapus NAS profile ini? Job yang menggunakan profile ini akan kembali ke global NAS config.')) return;
+  const resultEl = document.getElementById('nas-profile-result');
+  resultEl.style.display = 'block';
+  resultEl.className = 'connection-result';
+  try {
+    const res = await fetch(`/api/nas-profiles/${encodeURIComponent(profileId)}`, { method: 'DELETE' });
+    if (!res.ok) { resultEl.textContent = 'Gagal menghapus.'; resultEl.className = 'connection-result error'; return; }
+    resultEl.textContent = 'Profile dihapus.';
+    resultEl.className = 'connection-result success';
+    await loadStatus();
+  } catch (e) { resultEl.textContent = 'Gagal menghapus profile.'; resultEl.className = 'connection-result error'; }
+}
+
 async function saveSettings() {
   const cfg = await (await fetch('/api/config')).json();
   const settingsUpdate = {
@@ -1891,6 +2066,10 @@ function openAddJobModal(job = null) {
   document.getElementById('job-exclusions').value = job ? (job.exclusions || []).join('\n') : '';
   document.getElementById('job-engine').value = job ? (job.syncEngine || '') : '';
   document.getElementById('job-dest').value = job ? (job.destPath || '') : '';
+  const nasProfileSel = document.getElementById('job-nas-profile');
+  const currentNasProfileId = job ? (job.nasProfileId || '') : '';
+  nasProfileSel.value = currentNasProfileId;
+  if (window.nasProfiles) populateNasProfileDropdown(nasProfileSel, currentNasProfileId);
   document.getElementById('job-pg-host').value = job?.postgres?.host || '';
   document.getElementById('job-pg-port').value = job?.postgres?.port || '5432';
   document.getElementById('job-pg-database').value = job?.postgres?.database || '';
@@ -1972,7 +2151,8 @@ async function saveJob() {
       dumpFormat: document.getElementById('job-pg-dump-format').value || 'custom',
       retentionCount: document.getElementById('job-pg-retention').value.trim() || '3',
       extraOptions: document.getElementById('job-pg-extra-options').value.trim()
-    } : null
+    } : null,
+    nasProfileId: document.getElementById('job-nas-profile').value || ''
   };
 
   const editId = document.getElementById('edit-job-id').value;

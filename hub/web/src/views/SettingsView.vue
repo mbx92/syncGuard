@@ -6,7 +6,7 @@ import { useAdminAuth } from '../composables/useAdminAuth';
 import { useTheme } from '../composables/useTheme';
 
 const { api, error } = useHubApi();
-const { token, setToken, getHeaders } = useAdminAuth();
+const { token, setToken } = useAdminAuth();
 const { isLight, toggleTheme } = useTheme();
 const hubConfig = ref(null);
 const agents = ref([]);
@@ -44,7 +44,8 @@ const hubPostgresTestBusy = ref(false);
 const hubPostgresTestError = ref('');
 const hubPostgresTestSuccess = ref('');
 const deletingHubPostgresJobId = ref('');
-const downloadingAgentId = ref('');
+
+
 const tokenDraft = ref('');
 const tokenError = ref('');
 const tokenBusy = ref(false);
@@ -131,33 +132,6 @@ async function copyKey(text, id) {
     }, 2000);
   } catch {
     prompt('Salin apiKey:', text);
-  }
-}
-
-async function downloadAgent(agent) {
-  downloadingAgentId.value = agent.agentId;
-  try {
-    const res = await fetch(`/api/v1/agents/${encodeURIComponent(agent.agentId)}/download`, {
-      headers: {
-        ...getHeaders()
-      }
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'Gagal mengunduh paket agent');
-    }
-    const blob = await res.blob();
-    const fileName = `syncguard-agent-${agent.agentId}.zip`;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } finally {
-    downloadingAgentId.value = '';
   }
 }
 
@@ -434,7 +408,7 @@ onMounted(load);
         <div class="section-head">
           <div>
             <h2 class="section-title">Public hub URL</h2>
-            <p class="section-copy">Dipakai untuk paket download agent. Isi dengan URL yang benar-benar bisa diakses dari server tujuan, bukan `localhost`.</p>
+            <p class="section-copy">URL publik hub untuk diisi di konfigurasi agent. Isi dengan URL yang benar-benar bisa diakses dari server tujuan, bukan `localhost`.</p>
           </div>
         </div>
 
@@ -515,9 +489,7 @@ onMounted(load);
                     <button type="button" class="btn btn-ghost btn-sm" @click="copyKey(agent.apiKey, agent.agentId)">
                       {{ copiedId === agent.agentId ? 'Tersalin' : 'Salin key' }}
                     </button>
-                    <button type="button" class="btn btn-outline btn-sm" :disabled="downloadingAgentId === agent.agentId" @click="downloadAgent(agent)">
-                      {{ downloadingAgentId === agent.agentId ? 'Menyiapkan zip' : 'Download agent' }}
-                    </button>
+
                     <button type="button" class="btn btn-outline btn-error btn-sm" @click="openDelete(agent)">
                       Hapus
                     </button>

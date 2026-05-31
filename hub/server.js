@@ -6,7 +6,7 @@ const store = require('./store');
 const auth = require('./auth');
 const logPolicy = require('./log-policy');
 const hubPostgres = require('./hub-postgres');
-const agentPackage = require('./agent-package');
+
 
 const HUB_CONFIG_FILE = path.join(__dirname, 'config.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -198,30 +198,6 @@ app.get('/api/v1/agents/:id', requireAdmin, (req, res) => {
     apiKey: agent.apiKey,
     online: store.isOnline(agent)
   });
-});
-
-app.get('/api/v1/agents/:id/download', requireAdmin, async (req, res) => {
-  const s = store.loadStore();
-  const agent = s.agents[req.params.id];
-  if (!agent) return res.status(404).json({ error: 'Agent not found' });
-
-  const requestHost = req.get('host');
-  const preferredHubUrl = hubConfig.publicUrl || `${req.protocol}://${requestHost}`;
-
-  try {
-    const bundle = await agentPackage.createAgentPackage(agent, preferredHubUrl);
-    res.download(bundle.zipPath, bundle.fileName, (err) => {
-      if (!err) {
-        setTimeout(() => {
-          try {
-            fs.unlinkSync(bundle.zipPath);
-          } catch {}
-        }, 15000);
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message || 'Gagal membuat paket agent' });
-  }
 });
 
 app.delete('/api/v1/agents/:id', requireAdmin, (req, res) => {

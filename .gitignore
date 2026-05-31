@@ -10,6 +10,7 @@ hub/public/*
 hub/data/store.json
 hub/data/downloads/
 hub/data/postgres-dumps/
+dist/
 config/config.json
 config/syncguard.pid
 config/keys/
