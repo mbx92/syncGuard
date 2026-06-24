@@ -28,14 +28,14 @@ async function submit() {
   try {
     const health = await fetch('/api/v1/health');
     if (!health.ok) {
-      err.value = 'Server hub tidak merespons. Pastikan hub berjalan di port 7443.';
+      err.value = 'Server tidak merespons. Coba lagi nanti.';
       setToken('');
       return;
     }
     await api('/agents', { skipAuth: false });
     router.push(route.query.redirect || '/');
   } catch (e) {
-    err.value = e.message || 'Token tidak valid atau server tidak merespons.';
+    err.value = e.status === 401 ? 'Token tidak valid.' : 'Login gagal. Coba lagi nanti.';
     setToken('');
   } finally {
     busy.value = false;
@@ -89,10 +89,9 @@ async function submit() {
       </section>
 
       <section class="login-panel p-7 md:p-10">
-        <h2 class="text-2xl font-semibold">Admin Token</h2>
+        <h2 class="text-2xl font-semibold">Masuk</h2>
         <p class="mt-2 text-sm text-base-content/65">
-          Gunakan <code class="font-mono">adminToken</code> dari <code class="font-mono">hub/config.json</code>,
-          bukan API key milik agent.
+          Masukkan token admin yang diberikan operator.
         </p>
 
         <div v-if="err" class="alert alert-error mt-6">
@@ -106,7 +105,7 @@ async function submit() {
               v-model="inputToken"
               :type="showPassword ? 'text' : 'password'"
               class="input input-bordered w-full pr-20 font-mono"
-              placeholder="syncguard-admin-..."
+              placeholder="Token admin"
               :disabled="busy"
               @keyup.enter="submit"
             />
@@ -125,10 +124,9 @@ async function submit() {
           <span v-else>Masuk ke dashboard</span>
         </button>
 
-        <div class="mt-6 rounded-2xl bg-base-100/55 p-4 text-sm text-base-content/65">
-          Jika token benar tetapi login gagal, cek bahwa endpoint <code class="font-mono">/api/v1/health</code>
-          bisa diakses dan server hub berjalan.
-        </div>
+        <p class="mt-6 text-sm text-base-content/55">
+          Tidak punya akses? Hubungi administrator.
+        </p>
       </section>
     </div>
   </div>
