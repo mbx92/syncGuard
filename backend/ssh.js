@@ -23,6 +23,12 @@ function resolveSshKeyPath(config) {
   return custom || '';
 }
 
+/** Key file hanya dipakai jika sudah di-deploy ke NAS (hindari key stale setelah ganti password). */
+function resolveActiveSshKeyPath(config) {
+  if (!config.settings?.sshKeyDeployed) return '';
+  return resolveSshKeyPath(config);
+}
+
 function getKeyStatus(config) {
   const paths = getKeyPaths();
   const resolved = resolveSshKeyPath(config);
@@ -78,6 +84,25 @@ function generateKeyPair() {
   });
 }
 
+function sanitizeSshError(msg) {
+  if (!msg) return '';
+  let s = String(msg)
+    .replace(/\*\* WARNING:[\s\S]*?openssh\.com\/pq\.html\r?\n?/gi, '')
+    .replace(/Permission denied, please try again\.[\r\n]*/gi, '')
+    .replace(/\r/g, '')
+    .trim();
+  if (/All configured authentication methods failed/i.test(s)) {
+    return 'Login ditolak NAS — password salah atau user tidak punya akses SSH.';
+  }
+  if (/Permission denied \(publickey,password\)/i.test(s)) {
+    return 'Login ditolak NAS — password dan SSH key ditolak.';
+  }
+  if (/Permission denied/i.test(s)) {
+    return 'Login ditolak NAS — password atau SSH key salah.';
+  }
+  return s || 'SSH auth gagal';
+}
+
 function sshConnect(config, opts = {}) {
   const { nas } = config;
   const password = opts.password ?? nas.password;
@@ -101,8 +126,16 @@ function sshConnect(config, opts = {}) {
       return reject(new Error('Isi password NAS atau generate & deploy SSH key terlebih dahulu.'));
     }
 
+    conn.on('keyboard-interactive', (_name, _instr, _lang, prompts, finish) => {
+      if (password && prompts?.length) {
+        finish(prompts.map(() => password));
+      } else {
+        finish([]);
+      }
+    });
+
     conn.on('ready', () => resolve(conn));
-    conn.on('error', reject);
+    conn.on('error', (err) => reject(new Error(sanitizeSshError(err.message))));
     conn.connect(connectOpts);
   });
 }
@@ -127,7 +160,7 @@ async function testSshConnection(config, opts = {}) {
   try {
     conn = await sshConnect(config, opts);
     const result = await execCommand(conn, 'echo OK && uname -a 2>/dev/null || echo synology');
-    const authMethod = resolveSshKeyPath(config) && !opts.password ? 'ssh-key' : 'password';
+    const authMethod = opts.useKey === false ? 'password' : (resolveActiveSshKeyPath(config) ? 'ssh-key' : 'password');
     return {
       ok: result.code === 0,
       output: result.stdout.trim(),
@@ -135,7 +168,7 @@ async function testSshConnection(config, opts = {}) {
       error: result.stderr.trim() || (result.code !== 0 ? `SSH exit code ${result.code}` : '')
     };
   } catch (e) {
-    return { ok: false, error: e.message };
+    return { ok: false, error: sanitizeSshError(e.message) };
   } finally {
     if (conn) conn.end();
   }
@@ -184,7 +217,7 @@ async function deployPublicKey(config, opts = {}) {
       publicKey: paths.publicKey
     };
   } catch (e) {
-    return { ok: false, error: e.message };
+    return { ok: false, error: sanitizeSshError(e.message) };
   } finally {
     if (conn) conn.end();
   }
@@ -206,10 +239,13 @@ module.exports = {
   KEYS_DIR,
   getKeyPaths,
   resolveSshKeyPath,
+  resolveActiveSshKeyPath,
   getKeyStatus,
   generateKeyPair,
+  sshConnect,
   testSshConnection,
   deployPublicKey,
   sanitizeNasForClient,
-  sanitizeSettingsForClient
+  sanitizeSettingsForClient,
+  sanitizeSshError
 };

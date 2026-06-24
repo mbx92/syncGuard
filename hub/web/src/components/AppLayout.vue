@@ -30,11 +30,11 @@ const menuItems = [
     <aside class="app-sidebar hidden lg:flex lg:w-76 lg:flex-col lg:border-r lg:sticky lg:top-0 lg:h-screen">
       <div class="px-6 py-7 border-b border-base-300/70">
         <router-link to="/" class="block">
-          <div class="brand-lockup">
+          <div class="brand-lockup brand-panel">
             <img src="/icon.png" alt="SyncGuard" class="brand-mark" />
             <div>
-              <div class="eyebrow">SyncGuard Hub</div>
-              <div class="mt-3 text-2xl font-bold">Control Center</div>
+              <div class="eyebrow brand-syncguard-title">SyncGuard Hub</div>
+              <div class="mt-3 text-2xl font-bold brand-syncguard-subtitle">Control Center</div>
             </div>
           </div>
           <p class="mt-4 text-sm text-base-content/65">
@@ -80,9 +80,9 @@ const menuItems = [
             </div>
           </div>
           <div class="navbar-center">
-            <router-link to="/" class="brand-lockup gap-3">
+            <router-link to="/" class="brand-lockup gap-3 mobile-brand-bar">
               <img src="/icon.png" alt="SyncGuard" class="brand-mark brand-mark-sm" />
-              <span class="font-semibold">SyncGuard Hub</span>
+              <span class="font-semibold brand-syncguard-title">SyncGuard Hub</span>
             </router-link>
           </div>
           <div class="navbar-end">

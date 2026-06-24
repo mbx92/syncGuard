@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const auth = require('./auth');
+const { DATA_DIR, ensureDataDir, resolveDataPath } = require('./data-path');
 
-const DATA_DIR = path.join(__dirname, 'data');
-const STORE_FILE = path.join(DATA_DIR, 'store.json');
+const STORE_FILE = resolveDataPath('store.json');
 
 const emptyStore = () => ({
   agents: {},
@@ -18,7 +18,7 @@ const emptyStore = () => ({
 });
 
 function loadStore() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  ensureDataDir();
   if (!fs.existsSync(STORE_FILE)) {
     const s = emptyStore();
     saveStore(s);
@@ -32,7 +32,7 @@ function loadStore() {
 }
 
 function saveStore(store) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  ensureDataDir();
   fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2));
 }
 

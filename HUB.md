@@ -42,3 +42,7 @@ Agent juga bisa **self-enroll** saat pertama connect (tanpa apiKey) — key otom
 - `hub/data/` — data store JSON
 
 Folder `hub/` **tidak** perlu di-copy ke USB portable — lihat [`PORTABLE.md`](PORTABLE.md).
+
+## Deploy ke Coolify / Docker
+
+Lihat [`COOLIFY.md`](../COOLIFY.md) — image production dengan volume `/data`, env `HUB_ADMIN_TOKEN`, dan dukungan penuh fitur hub (agent + PostgreSQL backup).

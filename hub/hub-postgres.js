@@ -5,8 +5,9 @@ const cron = require('node-cron');
 
 const store = require('./store');
 const postgresUtil = require('../backend/postgres-util');
+const { resolveDataPath } = require('./data-path');
 
-const DUMPS_ROOT = path.join(__dirname, 'data', 'postgres-dumps');
+const DUMPS_ROOT = resolveDataPath('postgres-dumps');
 
 const activeRuns = new Map();
 const schedules = new Map();

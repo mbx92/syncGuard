@@ -1,0 +1,31 @@
+# SyncGuard Hub — local Docker (uji sebelum Coolify)
+# Dari root repo: docker compose -f docker/local/docker-compose.yml up -d --build
+
+services:
+  syncguard-hub:
+    build:
+      context: ../..
+      dockerfile: docker/hub/Dockerfile
+    image: syncguard-hub:local
+    container_name: syncguard-hub
+    restart: unless-stopped
+    ports:
+      - "7443:7443"
+    environment:
+      NODE_ENV: production
+      PORT: "7443"
+      HUB_PORT: "7443"
+      HUB_DATA_DIR: /data
+      HUB_ADMIN_TOKEN: ${HUB_ADMIN_TOKEN:-Admin123!}
+      HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-http://localhost:7443}
+    volumes:
+      - syncguard_hub_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7443/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  syncguard_hub_data:

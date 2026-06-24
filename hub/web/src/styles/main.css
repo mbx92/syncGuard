@@ -209,6 +209,40 @@ body {
   background: color-mix(in oklab, var(--color-primary) 18%, transparent);
 }
 
+.brand-syncguard-title {
+  color: #ffffff;
+}
+
+.brand-panel {
+  border-radius: 1.25rem;
+  padding: 0.15rem 0;
+}
+
+[data-theme="syncguard-hub-light"] .brand-panel {
+  background: linear-gradient(135deg, #0f1a25 0%, #1b2d3f 100%);
+  padding: 0.85rem 1rem;
+  box-shadow: 0 12px 28px rgba(15, 26, 37, 0.18);
+}
+
+[data-theme="syncguard-hub-light"] .brand-panel .brand-syncguard-title,
+[data-theme="syncguard-hub-light"] .brand-panel .brand-syncguard-subtitle {
+  color: #ffffff !important;
+}
+
+[data-theme="syncguard-hub-light"] .brand-panel .brand-syncguard-subtitle {
+  opacity: 0.82;
+}
+
+[data-theme="syncguard-hub-light"] .mobile-brand-bar {
+  background: linear-gradient(135deg, #0f1a25 0%, #1b2d3f 100%);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem 0.35rem 0.45rem;
+}
+
+[data-theme="syncguard-hub-light"] .mobile-brand-bar .brand-syncguard-title {
+  color: #ffffff !important;
+}
+
 .page-title {
   margin-top: 0.9rem;
   font-size: clamp(1.8rem, 3vw, 2.7rem);

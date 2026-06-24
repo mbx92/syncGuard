@@ -258,6 +258,9 @@ function mergeConfigUpdate(current, body) {
     const { password, ...nasRest } = body.nas;
     updated.nas = { ...current.nas, ...nasRest };
     if (password !== undefined && password !== '') {
+      if (current.nas?.password !== password) {
+        updated.settings = { ...updated.settings, sshKeyDeployed: false };
+      }
       updated.nas.password = password;
     }
   }
@@ -592,16 +595,29 @@ async function runJob(jobId) {
 
     const hasPerJobNas = !!(job.nasProfileId && (config.nasProfiles || []).find(p => p.id === job.nasProfileId));
     if (!hasPerJobNas) {
-      const keyPath = ssh.resolveSshKeyPath(config);
-      if (!keyPath) {
+      if (!config.settings?.sshKeyDeployed) {
+        const pwCheck = config.nas?.password
+          ? await ssh.testSshConnection(config, { useKey: false })
+          : { ok: false };
+        if (pwCheck.ok) {
+          return {
+            error: 'SSH key belum di-deploy ke NAS. Setelah ganti password Synology: isi password baru → Save NAS Config → Deploy SSH Key ke NAS.'
+          };
+        }
         return {
-          error: 'SSH key belum dikonfigurasi. Isi password NAS lalu klik "Deploy SSH Key ke NAS", atau set path ke private key.'
+          error: 'SSH key belum di-deploy. Isi password NAS yang baru, Save, lalu klik Deploy SSH Key ke NAS.'
         };
       }
-      const sshTest = await rsyncUtil.testRsyncSshAuth(config);
+      const keyPath = ssh.resolveActiveSshKeyPath(config);
+      if (!keyPath) {
+        return {
+          error: 'File SSH key tidak ditemukan. Generate key lalu Deploy SSH Key ke NAS.'
+        };
+      }
+      const sshTest = await rsyncUtil.testRsyncSshKeyAuth(config, keyPath);
       if (!sshTest.ok) {
         return {
-          error: `SSH auth gagal (${config.nas.user}@${config.nas.ip}:${config.nas.port}): ${sshTest.error}. Deploy ulang SSH key untuk user "${config.nas.user}" atau pastikan password NAS benar.`
+          error: `SSH key auth gagal (${config.nas.user}@${config.nas.ip}:${config.nas.port}): ${sshTest.error}. Deploy ulang SSH key setelah ganti password NAS.`
         };
       }
     }
@@ -927,10 +943,14 @@ app.get('/api/jobs/:id/log', (req, res) => {
   }
 });
 
-// GET /api/test-connection
-app.get('/api/test-connection', async (req, res) => {
-  const config = loadConfig();
-  const engine = req.query.engine || config.settings.syncEngine || 'rsync';
+// GET|POST /api/test-connection
+async function handleTestConnection(req, res) {
+  let config = loadConfig();
+  if (req.body?.nas) {
+    config = mergeConfigUpdate(config, { nas: req.body.nas });
+  }
+  const engine = req.query.engine || req.body?.engine || config.settings.syncEngine || 'rsync';
+  const preferPassword = req.body?.preferPassword !== false;
 
   if (engine === 'robocopy') {
     const share = config.settings.smbShare;
@@ -960,15 +980,26 @@ app.get('/api/test-connection', async (req, res) => {
     return;
   }
 
-  const result = await rsyncUtil.testRsyncSshAuth(config);
+  const result = await rsyncUtil.testRsyncConnection(config, { preferPassword });
+  if (result.ok && result.authMethod === 'password' && config.settings?.sshKeyDeployed) {
+    const saved = loadConfig();
+    saved.settings.sshKeyDeployed = false;
+    saveConfig(saved);
+    result.hint = (result.hint || '') + ' Status key di-reset — deploy ulang SSH key.';
+  }
   res.json({
     ok: result.ok,
     output: result.output,
     error: result.error,
+    hint: result.hint,
+    authMethod: result.authMethod,
     sshBin: result.sshBin,
     keyPath: result.keyPath
   });
-});
+}
+
+app.get('/api/test-connection', handleTestConnection);
+app.post('/api/test-connection', handleTestConnection);
 
 app.post('/api/postgres/test', async (req, res) => {
   const config = loadConfig();
@@ -1017,7 +1048,7 @@ app.post('/api/ssh/deploy-key', async (req, res) => {
     cfg.settings.sshKeyDeployed = true;
     saveConfig(cfg);
 
-    const verify = await rsyncUtil.testRsyncSshAuth(cfg);
+    const verify = await rsyncUtil.testRsyncSshKeyAuth(cfg, cfg.settings.sshKeyPath || ssh.resolveActiveSshKeyPath(cfg));
     result.verified = verify.ok;
     if (!verify.ok) {
       result.warning = `Key terkirim, tapi login via cwRsync SSH gagal: ${verify.error}. Pastikan user NAS "${cfg.nas.user}" benar dan Deploy dilakukan ke user yang sama.`;

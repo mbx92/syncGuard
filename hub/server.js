@@ -6,24 +6,13 @@ const store = require('./store');
 const auth = require('./auth');
 const logPolicy = require('./log-policy');
 const hubPostgres = require('./hub-postgres');
+const hubConfigModule = require('./hub-config');
+const { ensureDataDir } = require('./data-path');
 
-
-const HUB_CONFIG_FILE = path.join(__dirname, 'config.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-function loadHubConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(HUB_CONFIG_FILE, 'utf8'));
-  } catch {
-    return { port: 7443, publicUrl: '', adminToken: 'syncguard-admin-change-me' };
-  }
-}
-
-function saveHubConfig(nextConfig) {
-  fs.writeFileSync(HUB_CONFIG_FILE, JSON.stringify(nextConfig, null, 2));
-}
-
-const hubConfig = loadHubConfig();
+let hubConfig = hubConfigModule.loadHubConfig();
+ensureDataDir();
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
@@ -39,7 +28,7 @@ function withStore(fn) {
 
 function requireAdmin(req, res, next) {
   const token = req.headers['x-admin-token'];
-  const check = auth.verifyAdminToken(token, hubConfig.adminToken);
+  const check = auth.verifyAdminToken(token, hubConfigModule.resolveAdminToken(hubConfig));
   if (!check.ok) return res.status(401).json({ error: check.error });
   next();
 }
@@ -170,9 +159,9 @@ app.get('/api/v1/config', requireAdmin, (req, res) => {
 });
 
 app.post('/api/v1/config', requireAdmin, (req, res) => {
-  const nextPublicUrl = String(req.body?.publicUrl || '').trim();
-  hubConfig.publicUrl = nextPublicUrl;
-  saveHubConfig(hubConfig);
+  hubConfig = hubConfigModule.saveHubConfigPatch({
+    publicUrl: String(req.body?.publicUrl || '').trim()
+  });
   res.json({ ok: true, config: getHubSettingsResponse() });
 });
 
@@ -357,12 +346,12 @@ app.use((req, res) => {
   res.status(404).send('Hub UI not built. Run: npm run hub:build');
 });
 
-const PORT = process.env.HUB_PORT || hubConfig.port || 7443;
+const PORT = hubConfigModule.resolvePort(hubConfig);
 hubPostgres.init();
-const httpServer = app.listen(PORT, () => {
+const httpServer = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n╔══════════════════════════════════════╗`);
   console.log(`║   SyncGuard Hub on :${PORT}              ║`);
-  console.log(`║   API + Dashboard: http://localhost:${PORT} ║`);
+  console.log(`║   Data: ${process.env.HUB_DATA_DIR || 'hub/data'}`.padEnd(39) + '║');
   console.log(`╚══════════════════════════════════════╝\n`);
 });
 

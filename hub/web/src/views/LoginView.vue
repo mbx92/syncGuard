@@ -63,9 +63,9 @@ async function submit() {
 
     <div class="login-grid">
       <section class="login-panel p-7 md:p-10">
-        <div class="brand-lockup">
+        <div class="brand-lockup brand-panel">
           <img src="/icon.png" alt="SyncGuard" class="brand-mark" />
-          <div class="eyebrow">SyncGuard Hub</div>
+          <div class="eyebrow brand-syncguard-title">SyncGuard Hub</div>
         </div>
         <h1 class="page-title mt-5">Masuk ke panel administrasi</h1>
         <p class="page-subtitle">

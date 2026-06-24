@@ -258,31 +258,8 @@ function getRsyncSshEnv(nas) {
   };
 }
 
-function testRsyncSshAuth(config) {
-  const resolved = resolveRsyncPath(config.settings);
-  const keyPath = ssh.resolveSshKeyPath(config) || '';
-  const useCw = usesCwRsyncStyle(resolved);
-  const sshBin = getBundledSsh(resolved);
-  const cwd = getRsyncCwd(resolved.split(/\s+/)[0]);
-
-  const testArgs = [
-    '-p', String(config.nas.port || 22),
-    '-o', 'StrictHostKeyChecking=no',
-    '-o', 'ConnectTimeout=15',
-    '-o', `UserKnownHostsFile=${getKnownHostsPath(useCw)}`,
-    '-o', 'BatchMode=no',
-    '-o', 'PreferredAuthentications=publickey,password,keyboard-interactive'
-  ];
-  if (keyPath && fileExists(keyPath)) {
-    testArgs.push('-o', 'IdentitiesOnly=yes', '-i', useCw ? toCygwinPath(keyPath) : keyPath);
-  }
-  testArgs.push(`${config.nas.user}@${config.nas.ip}`, 'echo RSYNC_SSH_OK');
-
-  const opts = {
-    windowsHide: true,
-    timeout: 20000,
-    env: { ...process.env, ...getRsyncSshEnv(config.nas) }
-  };
+function runCwRsyncSshProbe(config, testArgs, keyPath, useCw, sshBin, cwd, env = process.env) {
+  const opts = { windowsHide: true, timeout: 20000, env: { ...process.env, ...env } };
   if (cwd) opts.cwd = cwd;
 
   return new Promise((resolve) => {
@@ -293,7 +270,7 @@ function testRsyncSshAuth(config) {
       resolve({
         ok,
         output: out,
-        error: ok ? '' : (errOut || err?.message || 'SSH auth gagal'),
+        error: ok ? '' : ssh.sanitizeSshError(errOut || err?.message || 'SSH auth gagal'),
         sshBin,
         keyPath: useCw && keyPath ? toCygwinPath(keyPath) : keyPath
       });
@@ -301,10 +278,125 @@ function testRsyncSshAuth(config) {
   });
 }
 
+function getCwRsyncSshContext(config) {
+  const resolved = resolveRsyncPath(config.settings);
+  const useCw = usesCwRsyncStyle(resolved);
+  const sshBin = getBundledSsh(resolved);
+  const cwd = getRsyncCwd(resolved.split(/\s+/)[0]);
+  return { useCw, sshBin, cwd };
+}
+
+function testRsyncSshKeyAuth(config, keyPath) {
+  const resolvedKey = keyPath || ssh.resolveActiveSshKeyPath(config);
+  if (!resolvedKey || !fileExists(resolvedKey)) {
+    return Promise.resolve({ ok: false, error: 'SSH key belum di-deploy atau file key tidak ditemukan.' });
+  }
+
+  const { useCw, sshBin, cwd } = getCwRsyncSshContext(config);
+  const testArgs = [
+    '-p', String(config.nas.port || 22),
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'ConnectTimeout=15',
+    '-o', `UserKnownHostsFile=${getKnownHostsPath(useCw)}`,
+    '-o', 'BatchMode=yes',
+    '-o', 'PreferredAuthentications=publickey',
+    '-o', 'PubkeyAuthentication=yes',
+    '-o', 'IdentitiesOnly=yes',
+    '-i', useCw ? toCygwinPath(resolvedKey) : resolvedKey,
+    `${config.nas.user}@${config.nas.ip}`,
+    'echo RSYNC_SSH_OK'
+  ];
+
+  return runCwRsyncSshProbe(config, testArgs, resolvedKey, useCw, sshBin, cwd);
+}
+
+async function testRsyncConnection(config, opts = {}) {
+  const preferPassword = !!opts.preferPassword;
+  const keyPath = ssh.resolveActiveSshKeyPath(config);
+
+  if (preferPassword && config.nas?.password) {
+    const pwResult = await ssh.testSshConnection(config, { useKey: false });
+    if (pwResult.ok) {
+      let hint = 'Password valid.';
+      if (keyPath) {
+        hint += ' Key rsync belum valid — klik Deploy SSH Key ke NAS.';
+      } else {
+        hint += ' Deploy SSH Key ke NAS agar backup rsync bisa berjalan.';
+      }
+      return {
+        ok: true,
+        output: pwResult.output,
+        error: '',
+        authMethod: 'password',
+        hint
+      };
+    }
+    return {
+      ok: false,
+      output: pwResult.output || '',
+      error: ssh.sanitizeSshError(pwResult.error) || 'Login ditolak NAS — password salah atau user tidak punya akses SSH.',
+      authMethod: 'password',
+      hint: 'Uji manual: ssh -p ' + (config.nas.port || 22) + ' ' + config.nas.user + '@' + config.nas.ip
+    };
+  }
+
+  if (keyPath) {
+    const keyResult = await testRsyncSshKeyAuth(config, keyPath);
+    if (keyResult.ok) {
+      return { ...keyResult, authMethod: 'ssh-key' };
+    }
+  }
+
+  if (config.nas?.password) {
+    const pwResult = await ssh.testSshConnection(config, { useKey: false });
+    if (pwResult.ok) {
+      let hint = 'Password valid.';
+      if (keyPath) {
+        hint += ' Key rsync gagal — setelah ganti password NAS, klik Deploy SSH Key ke NAS lagi.';
+      } else {
+        hint += ' Deploy SSH Key ke NAS agar backup rsync bisa berjalan (password saja tidak cukup untuk cwRsync).';
+      }
+      return {
+        ok: true,
+        output: pwResult.output,
+        error: '',
+        authMethod: 'password',
+        hint
+      };
+    }
+    return {
+      ok: false,
+      output: pwResult.output || '',
+      error: ssh.sanitizeSshError(pwResult.error) || 'Login ditolak NAS — password salah atau user tidak punya akses SSH.',
+      authMethod: 'password',
+      hint: 'Uji manual: ssh -p ' + (config.nas.port || 22) + ' ' + config.nas.user + '@' + config.nas.ip
+    };
+  }
+
+  if (keyPath) {
+    const keyResult = await testRsyncSshKeyAuth(config, keyPath);
+    return {
+      ...keyResult,
+      error: ssh.sanitizeSshError(keyResult.error),
+      authMethod: 'ssh-key'
+    };
+  }
+
+  return {
+    ok: false,
+    error: 'Isi password NAS atau deploy SSH key terlebih dahulu.',
+    authMethod: 'none'
+  };
+}
+
+function testRsyncSshAuth(config) {
+  return testRsyncConnection(config);
+}
+
 function buildRsyncJobArgs(job, config) {
   const nas = getEffectiveNas(job, config);
   const resolved = resolveRsyncPath(config.settings);
-  const keyPath = ssh.resolveSshKeyPath(config) || '';
+  const keyPath = ssh.resolveActiveSshKeyPath(config) || '';
 
   const options = (job.options || config.settings.defaultOptions || '-avz --progress')
     .split(' ')
@@ -344,6 +436,8 @@ module.exports = {
   buildRsyncJobArgs,
   testRsyncBinary,
   testRsyncSshAuth,
+  testRsyncSshKeyAuth,
+  testRsyncConnection,
   getRsyncRunEnv,
   normalizeLocalSource,
   buildRemoteDest,

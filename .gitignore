@@ -8,6 +8,7 @@ data/db-dumps/
 hub/public/*
 !hub/public/.gitkeep
 hub/data/store.json
+hub/data/runtime-config.json
 hub/data/downloads/
 hub/data/postgres-dumps/
 dist/

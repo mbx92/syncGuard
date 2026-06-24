@@ -31,6 +31,25 @@
     --shadow: 0 20px 45px rgba(4, 12, 24, 0.28);
   }
 
+  html[data-theme="light"] header {
+    background: rgba(15, 26, 37, 0.96);
+    border-bottom-color: #24384d;
+  }
+
+  html[data-theme="light"] .logo {
+    color: #eff6fb;
+  }
+
+  html[data-theme="light"] .nav-tab:hover {
+    color: #eff6fb;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  html[data-theme="light"] .nav-tab.active {
+    color: #06222a;
+    background: var(--accent);
+  }
+
   html[data-theme="light"] {
     --bg: #f4f8fb;
     --bg2: #ffffff;
@@ -808,7 +827,7 @@
       <div class="form-row">
         <div>
           <div class="form-label">SSH Password</div>
-          <div class="form-hint">Untuk deploy key &amp; koneksi awal (disimpan lokal)</div>
+          <div class="form-hint">Untuk deploy key &amp; koneksi awal. Setelah ganti password di Synology: isi password baru, Save, lalu Deploy SSH Key.</div>
         </div>
         <input class="form-input" id="nas-password" type="password" placeholder="Password SSH NAS" autocomplete="new-password">
       </div>
@@ -1847,8 +1866,15 @@ async function deploySshKey() {
   resultEl.style.display = 'block';
   resultEl.className = 'connection-result';
   setResult(resultEl, '', 'Deploying public key ke NAS...');
-  await saveNasConfig();
   const password = document.getElementById('nas-password').value;
+  await saveNasConfig();
+  if (!password) {
+    const cfg = await (await fetch('/api/config')).json();
+    if (!cfg.nas?.passwordSet) {
+      setResult(resultEl, 'fail', 'Isi password NAS (password baru setelah ganti di Synology) lalu Deploy lagi.');
+      return;
+    }
+  }
   const res = await fetch('/api/ssh/deploy-key', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2040,17 +2066,50 @@ async function testConnection(engine) {
     ? document.getElementById('smb-result')
     : document.getElementById('conn-result');
   setResult(resultEl, '', eng === 'robocopy' ? 'Testing SMB access...' : 'Testing SSH connection...');
-  if (eng === 'robocopy') await saveSettings();
-  else await saveNasConfig();
-  const res = await fetch(`/api/test-connection?engine=${eng}`);
+  if (eng === 'robocopy') {
+    await saveSettings();
+    const res = await fetch(`/api/test-connection?engine=${eng}`);
+    const data = await res.json();
+    showTestConnectionResult(resultEl, eng, data);
+    return;
+  }
+  const pw = document.getElementById('nas-password').value;
+  const nasDraft = {
+    ip: document.getElementById('nas-ip').value.trim(),
+    user: document.getElementById('nas-user').value.trim(),
+    port: parseInt(document.getElementById('nas-port').value) || 22,
+    basePath: document.getElementById('nas-path').value.trim()
+  };
+  if (pw) nasDraft.password = pw;
+  if (pw) {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nas: nasDraft })
+    });
+  }
+  const res = await fetch(`/api/test-connection?engine=${eng}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nas: nasDraft, preferPassword: true })
+  });
   const data = await res.json();
+  showTestConnectionResult(resultEl, eng, data);
+  if (data.ok) loadSshKeyStatus();
+}
+
+function showTestConnectionResult(resultEl, eng, data) {
   if (data.ok) {
     const auth = data.authMethod === 'ssh-key' ? ' (SSH key)' : ' (password)';
-    setResult(resultEl, 'ok', eng === 'robocopy'
+    let msg = eng === 'robocopy'
       ? 'SMB share accessible!'
-      : 'Connection successful! NAS reachable.' + auth);
+      : 'Connection successful! NAS reachable.' + auth;
+    if (data.hint) msg += ' ' + data.hint;
+    setResult(resultEl, 'ok', msg);
   } else {
-    setResult(resultEl, 'fail', data.error || 'Connection failed');
+    let msg = data.error || 'Connection failed';
+    if (data.hint) msg += ' — ' + data.hint;
+    setResult(resultEl, 'fail', msg);
   }
 }
 
