@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAdminAuth } from '../composables/useAdminAuth';
 import { useHubApi } from '../composables/useHubApi';
@@ -15,6 +15,35 @@ const inputToken = ref('');
 const err = ref('');
 const busy = ref(false);
 const showPassword = ref(false);
+const healthStatus = ref('checking');
+
+const healthLabel = computed(() => {
+  if (healthStatus.value === 'ok') return 'Server online';
+  if (healthStatus.value === 'error') return 'Server tidak tersedia';
+  return 'Memeriksa server…';
+});
+
+let healthTimer = null;
+
+async function checkHealth() {
+  try {
+    const res = await fetch('/api/v1/health');
+    if (!res.ok) throw new Error('unhealthy');
+    const data = await res.json().catch(() => ({}));
+    healthStatus.value = data.ok ? 'ok' : 'error';
+  } catch {
+    healthStatus.value = 'error';
+  }
+}
+
+onMounted(() => {
+  checkHealth();
+  healthTimer = setInterval(checkHealth, 15000);
+});
+
+onUnmounted(() => {
+  if (healthTimer) clearInterval(healthTimer);
+});
 
 async function submit() {
   if (!inputToken.value.trim()) {
@@ -45,7 +74,11 @@ async function submit() {
 
 <template>
   <div class="login-shell">
-    <div class="fixed right-4 top-4 z-20">
+    <div class="fixed right-4 top-4 z-20 flex items-center gap-3">
+      <div class="health-indicator" :title="healthLabel">
+        <span class="health-dot" :class="healthStatus" aria-hidden="true" />
+        <span class="health-label">{{ healthLabel }}</span>
+      </div>
       <button
         type="button"
         class="btn btn-ghost btn-square"

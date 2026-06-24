@@ -569,6 +569,68 @@ body {
   background: color-mix(in oklab, var(--color-base-200) 92%, black 8%);
 }
 
+.health-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in oklab, var(--color-base-200) 88%, black 12%);
+}
+
+.health-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.health-dot.checking {
+  background: var(--color-warning);
+  animation: health-pulse 1.6s ease-in-out infinite;
+}
+
+.health-dot.ok {
+  background: var(--color-success);
+  animation: health-pulse 2.4s ease-in-out infinite;
+}
+
+.health-dot.error {
+  background: var(--color-error);
+  animation: health-pulse-error 1.1s ease-in-out infinite;
+}
+
+.health-label {
+  font-size: 0.72rem;
+  color: color-mix(in oklab, var(--color-base-content) 62%, transparent);
+  white-space: nowrap;
+}
+
+@keyframes health-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes health-pulse-error {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.25);
+  }
+}
+
 [data-theme="syncguard-hub-light"] .login-panel {
   background: color-mix(in oklab, var(--color-base-200) 95%, white 5%);
 }
