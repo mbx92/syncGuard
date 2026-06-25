@@ -217,7 +217,8 @@ function getKnownHostsPath(useCw) {
 
 function buildSshTransport(nas, sshKeyPath, rsyncExecutable, opts = {}) {
   const useCw = usesCwRsyncStyle(rsyncExecutable);
-  const sshBin = getBundledSsh(rsyncExecutable);
+  const sshBinRaw = getBundledSsh(rsyncExecutable);
+  const sshBin = useCw ? toCygwinPath(sshBinRaw) : sshBinRaw;
   const hasKey = !!(sshKeyPath && fileExists(sshKeyPath));
   const hasPassword = !!opts.password;
   const keyForSsh = hasKey && useCw ? toCygwinPath(sshKeyPath) : sshKeyPath;
@@ -232,6 +233,8 @@ function buildSshTransport(nas, sshKeyPath, rsyncExecutable, opts = {}) {
 
   if (hasKey && !hasPassword) {
     parts.push('-o', 'BatchMode=yes');
+    parts.push('-o', 'PreferredAuthentications=publickey');
+    parts.push('-o', 'PubkeyAuthentication=yes');
   } else {
     parts.push('-o', 'BatchMode=no');
     parts.push('-o', 'PreferredAuthentications=publickey,password,keyboard-interactive');
@@ -397,13 +400,14 @@ function buildRsyncJobArgs(job, config) {
   const nas = getEffectiveNas(job, config);
   const resolved = resolveRsyncPath(config.settings);
   const keyPath = ssh.resolveActiveSshKeyPath(config) || '';
+  const hasKey = !!(keyPath && fileExists(keyPath));
 
   const options = (job.options || config.settings.defaultOptions || '-avz --progress')
     .split(' ')
     .filter(Boolean);
 
   const rsyncArgs = [...options];
-  rsyncArgs.push('-e', buildSshTransport(nas, keyPath, resolved, { password: nas.password }));
+  rsyncArgs.push('-e', buildSshTransport(nas, keyPath, resolved, { password: hasKey ? '' : nas.password }));
 
   if (job.exclusions?.length) {
     job.exclusions.forEach(ex => rsyncArgs.push(`--exclude=${ex}`));
@@ -418,6 +422,9 @@ function buildRsyncJobArgs(job, config) {
 
 function getRsyncRunEnv(config, job) {
   const nas = job ? getEffectiveNas(job, config) : config.nas;
+  const keyPath = ssh.resolveActiveSshKeyPath(config) || '';
+  const hasKey = !!(keyPath && fileExists(keyPath));
+  if (hasKey) return {};
   return getRsyncSshEnv(nas);
 }
 

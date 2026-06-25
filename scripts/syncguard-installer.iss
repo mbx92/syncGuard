@@ -3,7 +3,9 @@
 ; Build: iscc "scripts\syncguard-installer.iss"
 
 #define MyAppName "SyncGuard"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "SyncGuard"
 #define MyAppURL "https://syncguard.local"
 #define MyAppExeName "SyncGuard.exe"
@@ -19,7 +21,7 @@ DefaultDirName={localappdata}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir={#SourcePath}\..\dist
-OutputBaseFilename=SyncGuard-Setup-{#MyAppVersion}
+OutputBaseFilename=SyncGuard-Setup-Offline-{#MyAppVersion}
 SetupIconFile={#SourcePath}\..\assets\icon.ico
 UninstallDisplayIcon={app}\SyncGuard.exe
 Compression=lzma2/ultra
@@ -70,9 +72,12 @@ Source: "{#SourcePath}\..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignorever
 ; Exclude Linux scripts from default — they go to a subdir anyway
 ; Exclude build-launcher dependencies (C# compiler not always available)
 
-; Tools placeholder (README only — actual tools downloaded post-install)
-Source: "{#SourcePath}\..\tools\cwrsync\README.md"; DestDir: "{app}\tools\cwrsync"; Flags: ignoreversion
-Source: "{#SourcePath}\..\tools\node\README.md"; DestDir: "{app}\tools\node"; Flags: ignoreversion
+; Bundled offline tools
+Source: "{#SourcePath}\..\tools\cwrsync\*"; DestDir: "{app}\tools\cwrsync"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourcePath}\..\tools\node\*"; DestDir: "{app}\tools\node"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Offline runtime dependencies
+Source: "{#SourcePath}\..\node_modules\*"; DestDir: "{app}\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Root launchers and config
 Source: "{#SourcePath}\..\start.bat"; DestDir: "{app}"; Flags: ignoreversion
@@ -87,6 +92,7 @@ Source: "{#SourcePath}\..\setup-portable.bat"; DestDir: "{app}"; Flags: ignoreve
 Source: "{#SourcePath}\..\install-startup.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\..\remove-startup.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\..\refresh-icon-cache.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\..\SyncGuard.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Package manifests
 Source: "{#SourcePath}\..\package.json"; DestDir: "{app}"; Flags: ignoreversion
@@ -101,14 +107,6 @@ Source: "{#SourcePath}\..\HUB.md"; DestDir: "{app}"; Flags: ignoreversion
 ; ─── Post-install script ───────────────────────────────────────────────────────
 
 [Run]
-; Download Node.js portable
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\install-node.ps1"""; \
-  StatusMsg: "Mengunduh Node.js portable..."; Flags: runhidden; Check: not NodeExists
-
-; Install npm dependencies
-Filename: "{cmd}"; Parameters: "/C ""cd /d ""{app}"" && ""{app}\scripts\node-env.bat"" && call ""%SYNCGUARD_NPM%"" install --omit=dev"""; \
-  StatusMsg: "Menginstal dependensi npm..."; Flags: runhidden; Check: not DirExists(ExpandConstant('{app}\node_modules'))
-
 ; Build launcher EXE
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\build-launcher.ps1"" -AppDir ""{app}"""; \
   StatusMsg: "Membangun SyncGuard.exe..."; Flags: runhidden; Check: not LauncherExists
