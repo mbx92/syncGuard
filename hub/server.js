@@ -6,6 +6,7 @@ const store = require('./store');
 const auth = require('./auth');
 const logPolicy = require('./log-policy');
 const hubPostgres = require('./hub-postgres');
+const hubMinio = require('./hub-minio');
 const hubConfigModule = require('./hub-config');
 const { ensureDataDir } = require('./data-path');
 
@@ -146,7 +147,8 @@ function getHubSettingsResponse() {
     ingest: hubConfig.ingest,
     port: hubConfig.port,
     publicUrl: hubConfig.publicUrl || '',
-    hubPostgresJobs: hubPostgres.listJobs()
+    hubPostgresJobs: hubPostgres.listJobs(),
+    hubMinioJobs: hubMinio.listJobs()
   };
 }
 
@@ -281,6 +283,74 @@ app.get('/api/v1/hub/postgres/logs', requireAdmin, (req, res) => {
   res.json({ lines });
 });
 
+// ─── Hub MinIO Jobs ───────────────────────────────────────────────────────────
+
+app.get('/api/v1/hub/minio/jobs', requireAdmin, (req, res) => {
+  res.json({ jobs: hubMinio.listJobs() });
+});
+
+app.get('/api/v1/hub/minio/jobs/:id', requireAdmin, (req, res) => {
+  const job = hubMinio.getJob(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Hub MinIO job not found' });
+  res.json({ job });
+});
+
+app.post('/api/v1/hub/minio/jobs', requireAdmin, (req, res) => {
+  try {
+    const job = hubMinio.createJob(req.body || {});
+    res.json({ ok: true, job });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/v1/hub/minio/jobs/:id', requireAdmin, (req, res) => {
+  try {
+    const job = hubMinio.updateJob(req.params.id, req.body || {});
+    res.json({ ok: true, job });
+  } catch (err) {
+    const status = /not found/i.test(err.message) ? 404 : 400;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+app.delete('/api/v1/hub/minio/jobs/:id', requireAdmin, (req, res) => {
+  try {
+    const result = hubMinio.deleteJob(req.params.id);
+    res.json({ ok: true, result });
+  } catch (err) {
+    const status = /not found/i.test(err.message) ? 404 : 400;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/hub/minio/jobs/:id/run', requireAdmin, async (req, res) => {
+  const result = await hubMinio.runJob(req.params.id, 'manual');
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ ok: true, ...result });
+});
+
+app.post('/api/v1/hub/minio/jobs/:id/stop', requireAdmin, (req, res) => {
+  const result = hubMinio.stopJob(req.params.id);
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+app.post('/api/v1/hub/minio/test', requireAdmin, async (req, res) => {
+  const result = await hubMinio.testConnection(req.body || {});
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json(result);
+});
+
+app.get('/api/v1/hub/minio/runs', requireAdmin, (req, res) => {
+  res.json({ runs: hubMinio.listRuns(req.query.jobId) });
+});
+
+app.get('/api/v1/hub/minio/logs', requireAdmin, (req, res) => {
+  const lines = hubMinio.getLogs(req.query.jobId, req.query.runId, parseInt(req.query.last, 10) || 200);
+  res.json({ lines });
+});
+
 app.post('/api/v1/agents/:id/commands', requireAdmin, (req, res) => {
   const cmd = withStore(s =>
     store.enqueueCommand(s, req.params.id, req.body.type, req.body.payload)
@@ -348,6 +418,7 @@ app.use((req, res) => {
 
 const PORT = hubConfigModule.resolvePort(hubConfig);
 hubPostgres.init();
+hubMinio.init();
 const httpServer = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n╔══════════════════════════════════════╗`);
   console.log(`║   SyncGuard Hub on :${PORT}              ║`);

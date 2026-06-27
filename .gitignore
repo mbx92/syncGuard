@@ -11,6 +11,7 @@ hub/data/store.json
 hub/data/runtime-config.json
 hub/data/downloads/
 hub/data/postgres-dumps/
+hub/data/minio-backups/
 dist/
 config/config.json
 config/syncguard.pid

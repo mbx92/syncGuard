@@ -10,6 +10,7 @@ const ssh = require('./ssh');
 const lifecycle = require('./lifecycle');
 const rsyncUtil = require('./rsync-util');
 const postgresUtil = require('./postgres-util');
+const minioUtil = require('./minio-util');
 const agentHub = require('./agent-hub');
 const logRotate = require('./log-rotate');
 const logPurge = require('./log-purge');
@@ -42,12 +43,20 @@ const defaultConfig = {
     syncEngine: 'rsync',
     rsyncPath: 'tools/cwrsync/bin/rsync.exe',
     pgDumpPath: 'pg_dump',
+    mcPath: 'mc',
     sshKeyPath: '',
     defaultOptions: '-avz --progress --delete',
     robocopyPath: 'robocopy',
     robocopyDefaultOptions: '/E /Z /R:3 /W:5 /MT:8 /MIR',
     smbShare: '\\\\192.168.1.100\\backup',
     smbPassword: ''
+  },
+  minio: {
+    endpoint: '',
+    bucket: '',
+    prefix: 'syncguard',
+    accessKey: '',
+    secretKeyEncrypted: ''
   },
   hub: {
     enabled: false,
@@ -71,6 +80,7 @@ function loadConfig() {
         ...saved,
         nas: { ...defaultConfig.nas, ...saved.nas },
         settings: { ...defaultConfig.settings, ...saved.settings },
+        minio: { ...defaultConfig.minio, ...saved.minio },
         hub: { ...defaultConfig.hub, ...saved.hub },
         jobs: saved.jobs || []
       };
@@ -135,14 +145,44 @@ function buildRobocopyCommand(job, config) {
   };
 }
 
+function buildMinioMirrorCommand(job, config) {
+  const minio = { ...defaultConfig.minio, ...config.minio };
+  const localPath = getJobRuntimeSource(job);
+  const ctx = minioUtil.buildMirrorContext(minio, config.settings, localPath, job.name);
+  return {
+    engine: 'minio',
+    executable: ctx.executable,
+    args: ctx.args,
+    env: ctx.env,
+    commandLabel: `mc ${ctx.args.join(' ')}`
+  };
+}
+
+function buildMinioUploadCommand(minioConfig, settings, localFile, jobName) {
+  const ctx = minioUtil.buildUploadContext(minioConfig, settings, localFile, jobName);
+  return {
+    engine: 'minio',
+    executable: ctx.executable,
+    args: ctx.args,
+    env: ctx.env,
+    commandLabel: `mc ${ctx.args.join(' ')}`
+  };
+}
+
 function buildSyncCommand(job, config) {
   const engine = getJobSyncEngine(job, config);
+  if (engine === 'minio') return buildMinioMirrorCommand(job, config);
   if (engine === 'robocopy') return buildRobocopyCommand(job, config);
   if (getJobType(job) === 'postgresql') {
     const syncJob = { ...job, sourcePath: getJobRuntimeSource(job) };
     return buildRsyncCommand(syncJob, config);
   }
   return buildRsyncCommand(job, config);
+}
+
+function sanitizeMinioConfig(minio) {
+  if (!minio) return minioUtil.sanitizeMinioForClient(defaultConfig.minio);
+  return minioUtil.sanitizeMinioForClient({ ...defaultConfig.minio, ...minio });
 }
 
 function sanitizeHubForClient(hub) {
@@ -165,6 +205,7 @@ function sanitizeConfig(config) {
     ...config,
     nas: ssh.sanitizeNasForClient(config.nas),
     settings: ssh.sanitizeSettingsForClient(config.settings),
+    minio: sanitizeMinioConfig(config.minio),
     hub: sanitizeHubForClient(config.hub),
     jobs: (config.jobs || []).map(postgresUtil.sanitizeJobForClient),
     nasProfiles: (config.nasProfiles || []).map(sanitizeNasProfile)
@@ -200,7 +241,9 @@ function sanitizeJobForStatus(job) {
 
 function normalizeJobPayload(body, config, existingJob = null) {
   const jobType = body.jobType || existingJob?.jobType || 'filesystem';
-  const syncEngine = body.syncEngine || config.settings.syncEngine || 'rsync';
+  const allowedEngines = ['rsync', 'robocopy', 'minio'];
+  const rawEngine = body.syncEngine || existingJob?.syncEngine || config.settings.syncEngine || 'rsync';
+  const syncEngine = allowedEngines.includes(rawEngine) ? rawEngine : 'rsync';
   const base = {
     id: existingJob?.id || Date.now().toString(),
     name: body.name,
@@ -210,7 +253,7 @@ function normalizeJobPayload(body, config, existingJob = null) {
     destPath: body.destPath || '',
     options: body.options || (syncEngine === 'robocopy'
       ? config.settings.robocopyDefaultOptions
-      : config.settings.defaultOptions),
+      : (syncEngine === 'minio' ? '' : config.settings.defaultOptions)),
     exclusions: body.exclusions || [],
     enabled: existingJob?.enabled ?? true,
     createdAt: existingJob?.createdAt || new Date().toISOString(),
@@ -269,6 +312,13 @@ function mergeConfigUpdate(current, body) {
     updated.settings = { ...current.settings, ...settingsRest };
     if (smbPassword !== undefined && smbPassword !== '') {
       updated.settings.smbPassword = smbPassword;
+    }
+  }
+  if (body.minio) {
+    const { secretKey, ...minioRest } = body.minio;
+    updated.minio = { ...defaultConfig.minio, ...current.minio, ...minioRest };
+    if (secretKey !== undefined && secretKey !== '') {
+      updated.minio.secretKeyEncrypted = minioUtil.encryptSecretKey(secretKey);
     }
   }
   if (body.hub) {
@@ -364,6 +414,7 @@ function parseRobocopyOutput(line) {
 
 function parseSyncOutput(engine, line) {
   if (engine === 'robocopy') return parseRobocopyOutput(line);
+  if (engine === 'minio') return minioUtil.parseMcOutput(line);
   return parseRsyncOutput(line);
 }
 
@@ -514,8 +565,16 @@ async function runPostgresJob(jobId, job, config, startTime) {
     return finalizeJobResult(jobId, job, startTime, { success: false, error: dumpResult.error, message: dumpResult.error });
   }
 
-  const syncJob = { ...job, sourcePath: dumpResult.dumpDir };
-  const syncCmd = buildSyncCommand(syncJob, config);
+  const jobEngine = getJobSyncEngine(job, config);
+  let syncCmd;
+  if (jobEngine === 'minio') {
+    const minio = { ...defaultConfig.minio, ...config.minio };
+    syncCmd = buildMinioUploadCommand(minio, config.settings, dumpResult.outputFile, job.name);
+  } else {
+    const syncJob = { ...job, sourcePath: dumpResult.dumpDir };
+    syncCmd = buildSyncCommand(syncJob, config);
+  }
+
   jobStatus[jobId] = {
     ...jobStatus[jobId],
     phase: 'sync',
@@ -524,21 +583,30 @@ async function runPostgresJob(jobId, job, config, startTime) {
     dumpSizeBytes: dumpResult.sizeBytes
   };
   broadcast({ type: 'job_status', jobId, status: jobStatus[jobId] });
-  writeLog(jobId, '=== Sync to NAS started ===');
+  const syncLabel = jobEngine === 'minio' ? 'Upload ke MinIO' : 'Sync to NAS';
+  writeLog(jobId, `=== ${syncLabel} started ===`);
   writeLog(jobId, `Command: ${syncCmd.commandLabel}`);
+  if (jobEngine === 'minio') {
+    const minio = { ...defaultConfig.minio, ...config.minio };
+    writeLog(jobId, `Destination: s3://${minio.bucket}/${minioUtil.formatMinioObjectKey(minio, job.name, dumpResult.fileName)}`);
+  }
 
   const syncResult = await new Promise((resolve) => {
     const useShell = process.platform === 'win32' &&
       !path.isAbsolute(syncCmd.executable) &&
       syncCmd.executable.toLowerCase() !== 'wsl';
 
+    const syncEnv = syncCmd.engine === 'rsync'
+      ? { ...process.env, ...rsyncUtil.getRsyncRunEnv(config, job) }
+      : syncCmd.engine === 'minio'
+        ? syncCmd.env
+        : process.env;
+
     const proc = spawnTrackedProcess(jobId, syncCmd.executable, syncCmd.args, {
       shell: useShell,
       windowsHide: true,
       cwd: syncCmd.cwd,
-      env: syncCmd.engine === 'rsync'
-        ? { ...process.env, ...rsyncUtil.getRsyncRunEnv(config, job) }
-        : process.env
+      env: syncEnv
     });
 
     attachProcessLogs(jobId, proc, {
@@ -557,9 +625,10 @@ async function runPostgresJob(jobId, job, config, startTime) {
     proc.on('close', (code) => {
       delete activeProcesses[jobId];
       const success = syncCmd.engine === 'robocopy' ? isRobocopySuccess(code) : code === 0;
+      const dest = syncCmd.engine === 'minio' ? 'MinIO' : 'NAS';
       resolve(success
-        ? { success: true, message: 'dump + sync selesai' }
-        : { success: false, error: `sync gagal (exit ${code})`, message: `sync gagal (exit ${code})` });
+        ? { success: true, message: `dump + upload ke ${dest} selesai` }
+        : { success: false, error: `sync ke ${dest} gagal (exit ${code})`, message: `sync ke ${dest} gagal (exit ${code})` });
     });
 
     proc.on('error', (err) => {
@@ -630,6 +699,13 @@ async function runJob(jobId) {
     }
   }
 
+  if (engine === 'minio') {
+    const mcTest = await minioUtil.testMcBinary(minioUtil.getEffectiveMcPath(config.settings));
+    if (!mcTest.ok) {
+      return { error: mcTest.error };
+    }
+  }
+
   const syncCmd = buildSyncCommand(job, config);
 
   const startTime = new Date();
@@ -661,13 +737,17 @@ async function runJob(jobId) {
       !path.isAbsolute(syncCmd.executable) &&
       syncCmd.executable.toLowerCase() !== 'wsl';
 
+    const spawnEnv = engine === 'rsync'
+      ? { ...process.env, ...rsyncUtil.getRsyncRunEnv(config, job) }
+      : engine === 'minio'
+        ? syncCmd.env
+        : process.env;
+
     const proc = spawn(syncCmd.executable, syncCmd.args, {
       shell: useShell,
       windowsHide: true,
       cwd: syncCmd.cwd,
-      env: engine === 'rsync'
-        ? { ...process.env, ...rsyncUtil.getRsyncRunEnv(config, job) }
-        : process.env
+      env: spawnEnv
     });
 
     activeProcesses[jobId] = proc;
@@ -733,7 +813,9 @@ async function runJob(jobId) {
       delete activeProcesses[jobId];
       let msg = err.message;
       if (err.code === 'ENOENT') {
-        if (engine === 'robocopy') {
+        if (engine === 'minio') {
+          msg = 'MinIO Client (mc) tidak ditemukan. Download dari https://dl.min.io/client/mc/release/ lalu isi mc Path di Settings.';
+        } else if (engine === 'robocopy') {
           msg = 'robocopy not found. Pastikan robocopy tersedia di PATH Windows.';
         } else {
           const detected = rsyncUtil.detectRsyncInstallation();
@@ -872,6 +954,7 @@ app.get('/api/status', (req, res) => {
     jobs,
     nas: ssh.sanitizeNasForClient(config.nas),
     settings: ssh.sanitizeSettingsForClient(config.settings),
+    minio: sanitizeMinioConfig(config.minio),
     hub: sanitizeHubForClient(config.hub),
     nasProfiles: (config.nasProfiles || []).map(sanitizeNasProfile)
   });
@@ -1014,6 +1097,26 @@ app.post('/api/postgres/test', async (req, res) => {
   }
 
   const result = await postgresUtil.testPostgresConnection(draftJob, config.settings);
+  res.json(result);
+});
+
+app.post('/api/minio/test', async (req, res) => {
+  const config = loadConfig();
+  const body = req.body || {};
+  const secretKey = body.secretKey;
+  const minioConfig = {
+    ...defaultConfig.minio,
+    ...config.minio,
+    endpoint: body.endpoint || config.minio?.endpoint || '',
+    bucket: body.bucket || config.minio?.bucket || '',
+    prefix: body.prefix !== undefined ? body.prefix : (config.minio?.prefix || 'syncguard'),
+    accessKey: body.accessKey || config.minio?.accessKey || '',
+    secretKeyEncrypted: secretKey
+      ? minioUtil.encryptSecretKey(secretKey)
+      : (config.minio?.secretKeyEncrypted || '')
+  };
+  const settings = { ...config.settings, mcPath: body.mcPath || config.settings?.mcPath };
+  const result = await minioUtil.testMinioConnection(minioConfig, settings);
   res.json(result);
 });
 

@@ -45,6 +45,43 @@ const hubPostgresTestError = ref('');
 const hubPostgresTestSuccess = ref('');
 const deletingHubPostgresJobId = ref('');
 
+// ── Hub MinIO jobs ─────────────────────────────────────────────────────────
+const hubMinioJobs = ref([]);
+const hubMinioRuns = ref([]);
+const hubMinioLogs = ref([]);
+const selectedHubMinioJobId = ref('');
+const hubMinioDraft = ref({
+  id: '',
+  name: '',
+  description: '',
+  schedule: 'manual',
+  destType: 'folder',
+  sourceDir: '',
+  minio: {
+    endpoint: '',
+    bucket: '',
+    prefix: 'syncguard',
+    accessKey: '',
+    secretKey: '',
+    mcPath: 'mc'
+  },
+  postgres: {
+    host: '',
+    port: '5432',
+    database: '',
+    username: '',
+    password: '',
+    pgDumpPath: 'pg_dump',
+    dumpFormat: 'custom',
+    retentionCount: '3',
+    extraOptions: ''
+  }
+});
+const hubMinioBusy = ref(false);
+const hubMinioTestBusy = ref(false);
+const hubMinioTestError = ref('');
+const hubMinioTestSuccess = ref('');
+const deletingHubMinioJobId = ref('');
 
 const tokenDraft = ref('');
 const tokenError = ref('');
@@ -92,6 +129,21 @@ async function load() {
   }
   if (selectedHubPostgresJobId.value) {
     await loadHubPostgresLogs(selectedHubPostgresJobId.value);
+  }
+  try {
+    const mResult = await api('/hub/minio/jobs');
+    hubMinioJobs.value = mResult.jobs || [];
+  } catch {
+    hubMinioJobs.value = [];
+  }
+  try {
+    const mRunsResult = await api('/hub/minio/runs');
+    hubMinioRuns.value = mRunsResult.runs || [];
+  } catch {
+    hubMinioRuns.value = [];
+  }
+  if (selectedHubMinioJobId.value) {
+    await loadHubMinioLogs(selectedHubMinioJobId.value);
   }
 }
 
@@ -305,6 +357,156 @@ async function loadHubPostgresLogs(jobId) {
   }
 }
 
+function resetHubMinioDraft() {
+  hubMinioDraft.value = {
+    id: '',
+    name: '',
+    description: '',
+    schedule: 'manual',
+    destType: 'folder',
+    sourceDir: '',
+    minio: { endpoint: '', bucket: '', prefix: 'syncguard', accessKey: '', secretKey: '', mcPath: 'mc' },
+    postgres: { host: '', port: '5432', database: '', username: '', password: '', pgDumpPath: 'pg_dump', dumpFormat: 'custom', retentionCount: '3', extraOptions: '' }
+  };
+}
+
+function openHubMinioModal(job = null) {
+  hubMinioTestError.value = '';
+  hubMinioTestSuccess.value = '';
+  if (!job) {
+    resetHubMinioDraft();
+  } else {
+    hubMinioDraft.value = {
+      id: job.id,
+      name: job.name || '',
+      description: job.description || '',
+      schedule: job.schedule || 'manual',
+      destType: job.destType || 'folder',
+      sourceDir: job.sourceDir || '',
+      minio: {
+        endpoint: job.minio?.endpoint || '',
+        bucket: job.minio?.bucket || '',
+        prefix: job.minio?.prefix !== undefined ? job.minio.prefix : 'syncguard',
+        accessKey: job.minio?.accessKey || '',
+        secretKey: '',
+        mcPath: job.minio?.mcPath || 'mc'
+      },
+      postgres: {
+        host: job.postgres?.host || '',
+        port: String(job.postgres?.port || 5432),
+        database: job.postgres?.database || '',
+        username: job.postgres?.username || '',
+        password: '',
+        pgDumpPath: job.postgres?.pgDumpPath || 'pg_dump',
+        dumpFormat: job.postgres?.dumpFormat || 'custom',
+        retentionCount: String(job.postgres?.retentionCount || 3),
+        extraOptions: job.postgres?.extraOptions || ''
+      }
+    };
+  }
+  document.getElementById('hub_minio_modal')?.showModal();
+}
+
+function closeHubMinioModal() {
+  document.getElementById('hub_minio_modal')?.close();
+  hubMinioTestError.value = '';
+  hubMinioTestSuccess.value = '';
+  hubMinioBusy.value = false;
+}
+
+function openDeleteHubMinioJob(jobId) {
+  deletingHubMinioJobId.value = jobId;
+  document.getElementById('delete_hub_minio_job_modal')?.showModal();
+}
+
+function closeDeleteHubMinioJob() {
+  deletingHubMinioJobId.value = '';
+  document.getElementById('delete_hub_minio_job_modal')?.close();
+}
+
+async function saveHubMinioJob() {
+  hubMinioBusy.value = true;
+  try {
+    const d = hubMinioDraft.value;
+    const payload = {
+      name: d.name,
+      description: d.description,
+      schedule: d.schedule,
+      destType: d.destType,
+      sourceDir: d.sourceDir,
+      minio: { ...d.minio },
+      postgres: { ...d.postgres }
+    };
+    if (d.id) {
+      await api(`/hub/minio/jobs/${d.id}`, { method: 'PUT', body: payload });
+    } else {
+      await api('/hub/minio/jobs', { method: 'POST', body: payload });
+    }
+    closeHubMinioModal();
+    await load();
+  } finally {
+    hubMinioBusy.value = false;
+  }
+}
+
+async function testHubMinioJob() {
+  hubMinioTestBusy.value = true;
+  hubMinioTestError.value = '';
+  hubMinioTestSuccess.value = '';
+  try {
+    const d = hubMinioDraft.value;
+    const payload = {
+      id: d.id || undefined,
+      name: d.name,
+      destType: d.destType,
+      sourceDir: d.sourceDir,
+      minio: { ...d.minio },
+      postgres: { ...d.postgres }
+    };
+    const result = await api('/hub/minio/test', { method: 'POST', body: payload });
+    hubMinioTestSuccess.value = result.version
+      ? `Koneksi MinIO berhasil — mc ${result.version}`
+      : 'Koneksi MinIO berhasil.';
+  } catch (err) {
+    hubMinioTestError.value = err.message || 'Koneksi MinIO gagal.';
+  } finally {
+    hubMinioTestBusy.value = false;
+  }
+}
+
+async function runHubMinioJob(jobId) {
+  await api(`/hub/minio/jobs/${jobId}/run`, { method: 'POST' });
+  selectedHubMinioJobId.value = jobId;
+  await load();
+  await loadHubMinioLogs(jobId);
+}
+
+async function stopHubMinioJob(jobId) {
+  await api(`/hub/minio/jobs/${jobId}/stop`, { method: 'POST' });
+  await load();
+}
+
+async function confirmDeleteHubMinioJob() {
+  if (!deletingHubMinioJobId.value) return;
+  await api(`/hub/minio/jobs/${deletingHubMinioJobId.value}`, { method: 'DELETE' });
+  closeDeleteHubMinioJob();
+  if (selectedHubMinioJobId.value === deletingHubMinioJobId.value) {
+    selectedHubMinioJobId.value = '';
+    hubMinioLogs.value = [];
+  }
+  await load();
+}
+
+async function loadHubMinioLogs(jobId) {
+  selectedHubMinioJobId.value = jobId;
+  try {
+    const result = await api(`/hub/minio/logs?jobId=${encodeURIComponent(jobId)}&last=200`);
+    hubMinioLogs.value = result.lines || [];
+  } catch {
+    hubMinioLogs.value = [];
+  }
+}
+
 function openTokenModal() {
   tokenDraft.value = token.value;
   tokenError.value = '';
@@ -400,6 +602,12 @@ onMounted(load);
         <div class="metric-label">Hub PostgreSQL jobs</div>
         <div class="metric-value text-warning">{{ hubPostgresJobs.length }}</div>
         <div class="metric-note">Backup SQL yang dijalankan langsung dari server hub.</div>
+      </article>
+
+      <article class="metric-card" style="--metric-color: var(--color-secondary)">
+        <div class="metric-label">Hub MinIO jobs</div>
+        <div class="metric-value" style="color:var(--color-secondary)">{{ hubMinioJobs.length }}</div>
+        <div class="metric-note">Backup ke MinIO/S3 dari server hub.</div>
       </article>
     </section>
 
@@ -565,6 +773,62 @@ onMounted(load);
       </div>
     </section>
 
+    <!-- ══ Hub MinIO Jobs section ══ -->
+    <section class="surface-card">
+      <div class="p-5 md:p-6">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Hub MinIO / S3 jobs</h2>
+            <p class="section-copy">Backup folder atau PostgreSQL langsung dari server hub ke MinIO / S3-compatible storage.</p>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" @click="openHubMinioModal()">+ Tambah job</button>
+        </div>
+
+        <div class="data-table overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>Tipe</th>
+                <th>Schedule</th>
+                <th>Status terakhir</th>
+                <th class="text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="job in hubMinioJobs" :key="job.id">
+                <td>
+                  <div class="font-medium">{{ job.name }}</div>
+                  <div class="mono-soft mt-1 text-xs">{{ job.minio?.endpoint }}</div>
+                </td>
+                <td>
+                  <span class="badge badge-ghost">{{ job.destType || 'folder' }}</span>
+                </td>
+                <td class="text-sm">{{ job.schedule === 'manual' ? 'Manual' : job.schedule }}</td>
+                <td>
+                  <span class="badge badge-status" :class="/success/i.test(job.lastResult || '') ? 'badge-success' : (/fail|error|running/i.test(job.lastResult || '') ? 'badge-warning' : 'badge-ghost')">
+                    {{ job.lastResult || (job.status || 'idle') }}
+                  </span>
+                </td>
+                <td>
+                  <div class="flex flex-wrap justify-end gap-2">
+                    <button type="button" class="btn btn-primary btn-sm" @click="runHubMinioJob(job.id)">Run</button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="stopHubMinioJob(job.id)">Stop</button>
+                    <button type="button" class="btn btn-outline btn-sm" @click="loadHubMinioLogs(job.id)">Log</button>
+                    <button type="button" class="btn btn-outline btn-sm" @click="openHubMinioModal(job)">Edit</button>
+                    <button type="button" class="btn btn-outline btn-error btn-sm" @click="openDeleteHubMinioJob(job.id)">Hapus</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!hubMinioJobs.length">
+                <td colspan="5" class="text-center text-base-content/55">Belum ada hub MinIO job.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section class="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
       <article class="surface-card">
         <div class="p-5 md:p-6">
@@ -684,6 +948,65 @@ onMounted(load);
           </div>
 
           <pre class="log-console max-h-96 overflow-auto whitespace-pre-wrap">{{ hubPostgresLogs.join('\n') || '(pilih job SQL untuk melihat log)' }}</pre>
+        </div>
+      </article>
+    </section>
+
+    <!-- ══ Hub MinIO runs & logs ══ -->
+    <section class="grid gap-4 xl:grid-cols-[0.95fr_1.05fr] mt-4">
+      <article class="surface-card">
+        <div class="p-5 md:p-6">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">Runs hub MinIO</h2>
+              <p class="section-copy">Riwayat backup MinIO yang dijalankan langsung dari hub.</p>
+            </div>
+          </div>
+
+          <div class="data-table overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Job</th>
+                  <th>Durasi</th>
+                  <th>Hasil</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="run in hubMinioRuns.slice(0, 20)" :key="run.id">
+                  <td class="text-sm">{{ new Date(run.startedAt).toLocaleString('id-ID') }}</td>
+                  <td>
+                    <div>{{ run.jobName || run.jobId }}</div>
+                    <div class="mono-soft mt-1">{{ run.jobId }}</div>
+                  </td>
+                  <td>{{ run.durationSec != null ? `${run.durationSec}s` : '-' }}</td>
+                  <td>
+                    <span class="badge badge-status" :class="/success/i.test(run.result || '') ? 'badge-success' : (/fail|error|running/i.test(run.result || '') ? 'badge-warning' : 'badge-ghost')">
+                      {{ run.result || '-' }}
+                    </span>
+                  </td>
+                </tr>
+                <tr v-if="!hubMinioRuns.length">
+                  <td colspan="4" class="text-center text-base-content/55">Riwayat hub MinIO masih kosong.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </article>
+
+      <article class="surface-card">
+        <div class="p-5 md:p-6">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">Log hub MinIO</h2>
+              <p class="section-copy">Menampilkan tail log untuk job MinIO yang dipilih.</p>
+            </div>
+            <div v-if="selectedHubMinioJobId" class="badge badge-outline">{{ selectedHubMinioJobId }}</div>
+          </div>
+
+          <pre class="log-console max-h-96 overflow-auto whitespace-pre-wrap">{{ hubMinioLogs.join('\n') || '(klik Log pada job MinIO untuk melihat log)' }}</pre>
         </div>
       </article>
     </section>
@@ -844,6 +1167,145 @@ onMounted(load);
         </div>
       </div>
       <form method="dialog" class="modal-backdrop"><button @click="closeDeleteHubPostgresJob">close</button></form>
+    </dialog>
+
+    <!-- ══ Hub MinIO modal ══ -->
+    <dialog id="hub_minio_modal" class="modal">
+      <div class="modal-box max-w-3xl">
+        <h3 class="text-lg font-bold">{{ hubMinioDraft.id ? 'Edit hub MinIO job' : 'Tambah hub MinIO job' }}</h3>
+        <div class="grid gap-3 md:grid-cols-2 mt-4">
+          <label class="form-control">
+            <span class="label-text mb-2 font-medium">Nama job</span>
+            <input v-model="hubMinioDraft.name" class="input input-bordered w-full" placeholder="Backup ke MinIO" />
+          </label>
+          <label class="form-control">
+            <span class="label-text mb-2 font-medium">Schedule</span>
+            <select v-model="hubMinioDraft.schedule" class="select select-bordered w-full">
+              <option value="manual">Manual</option>
+              <option value="0 * * * *">Setiap jam</option>
+              <option value="0 2 * * *">Setiap hari 02:00</option>
+              <option value="0 3 * * 0">Mingguan</option>
+            </select>
+          </label>
+          <label class="form-control md:col-span-2">
+            <span class="label-text mb-2 font-medium">Description</span>
+            <input v-model="hubMinioDraft.description" class="input input-bordered w-full" placeholder="Opsional" />
+          </label>
+          <label class="form-control md:col-span-2">
+            <span class="label-text mb-2 font-medium">Tipe backup</span>
+            <select v-model="hubMinioDraft.destType" class="select select-bordered w-full">
+              <option value="folder">Folder → MinIO (mirror)</option>
+              <option value="postgres">PostgreSQL → MinIO (dump + upload)</option>
+            </select>
+          </label>
+
+          <!-- Folder source -->
+          <label v-if="hubMinioDraft.destType === 'folder'" class="form-control md:col-span-2">
+            <span class="label-text mb-2 font-medium">Source directory</span>
+            <input v-model="hubMinioDraft.sourceDir" class="input input-bordered w-full font-mono" placeholder="/data/files atau /mnt/share" />
+          </label>
+
+          <!-- PostgreSQL fields -->
+          <template v-if="hubMinioDraft.destType === 'postgres'">
+            <label class="form-control">
+              <span class="label-text mb-2 font-medium">Host PostgreSQL</span>
+              <input v-model="hubMinioDraft.postgres.host" class="input input-bordered w-full font-mono" placeholder="127.0.0.1" />
+            </label>
+            <label class="form-control">
+              <span class="label-text mb-2 font-medium">Port</span>
+              <input v-model="hubMinioDraft.postgres.port" class="input input-bordered w-full font-mono" placeholder="5432" />
+            </label>
+            <label class="form-control">
+              <span class="label-text mb-2 font-medium">Database</span>
+              <input v-model="hubMinioDraft.postgres.database" class="input input-bordered w-full font-mono" placeholder="appdb" />
+            </label>
+            <label class="form-control">
+              <span class="label-text mb-2 font-medium">Username</span>
+              <input v-model="hubMinioDraft.postgres.username" class="input input-bordered w-full font-mono" placeholder="postgres" />
+            </label>
+            <label class="form-control">
+              <span class="label-text mb-2 font-medium">Password PostgreSQL</span>
+              <input v-model="hubMinioDraft.postgres.password" type="password" class="input input-bordered w-full" :placeholder="hubMinioDraft.id ? 'Kosongkan jika tidak ganti' : 'Isi password PostgreSQL'" />
+            </label>
+            <label class="form-control">
+              <span class="label-text mb-2 font-medium">pg_dump path</span>
+              <input v-model="hubMinioDraft.postgres.pgDumpPath" class="input input-bordered w-full font-mono" placeholder="pg_dump" />
+            </label>
+            <label class="form-control">
+              <span class="label-text mb-2 font-medium">Dump format</span>
+              <select v-model="hubMinioDraft.postgres.dumpFormat" class="select select-bordered w-full">
+                <option value="custom">Custom dump (.dump)</option>
+                <option value="plain">Plain SQL (.sql)</option>
+              </select>
+            </label>
+            <label class="form-control">
+              <span class="label-text mb-2 font-medium">Retensi staging</span>
+              <input v-model="hubMinioDraft.postgres.retentionCount" class="input input-bordered w-full font-mono" placeholder="3" />
+            </label>
+          </template>
+
+          <!-- MinIO credentials -->
+          <div class="divider md:col-span-2 my-1">MinIO / S3 Config</div>
+          <label class="form-control md:col-span-2">
+            <span class="label-text mb-2 font-medium">Endpoint</span>
+            <input v-model="hubMinioDraft.minio.endpoint" class="input input-bordered w-full font-mono" placeholder="https://play.min.io atau http://192.168.1.10:9000" />
+          </label>
+          <label class="form-control">
+            <span class="label-text mb-2 font-medium">Bucket</span>
+            <input v-model="hubMinioDraft.minio.bucket" class="input input-bordered w-full font-mono" placeholder="syncguard-backups" />
+          </label>
+          <label class="form-control">
+            <span class="label-text mb-2 font-medium">Prefix</span>
+            <input v-model="hubMinioDraft.minio.prefix" class="input input-bordered w-full font-mono" placeholder="syncguard" />
+          </label>
+          <label class="form-control">
+            <span class="label-text mb-2 font-medium">Access Key</span>
+            <input v-model="hubMinioDraft.minio.accessKey" class="input input-bordered w-full font-mono" placeholder="minioadmin" autocomplete="off" />
+          </label>
+          <label class="form-control">
+            <span class="label-text mb-2 font-medium">Secret Key</span>
+            <input v-model="hubMinioDraft.minio.secretKey" type="password" class="input input-bordered w-full" :placeholder="hubMinioDraft.id ? 'Kosongkan jika tidak ganti' : 'Isi secret key'" autocomplete="new-password" />
+          </label>
+          <label class="form-control md:col-span-2">
+            <span class="label-text mb-2 font-medium">mc Path</span>
+            <input v-model="hubMinioDraft.minio.mcPath" class="input input-bordered w-full font-mono" placeholder="mc" />
+          </label>
+        </div>
+
+        <div v-if="hubMinioTestError" class="alert alert-error mt-4">
+          <span>{{ hubMinioTestError }}</span>
+        </div>
+        <div v-if="hubMinioTestSuccess" class="alert alert-success mt-4">
+          <span>{{ hubMinioTestSuccess }}</span>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" @click="closeHubMinioModal">Batal</button>
+          <button type="button" class="btn btn-outline" :disabled="hubMinioTestBusy" @click="testHubMinioJob">
+            <span v-if="hubMinioTestBusy" class="loading loading-spinner loading-xs" />
+            Test koneksi
+          </button>
+          <button type="button" class="btn btn-primary" :disabled="hubMinioBusy" @click="saveHubMinioJob">
+            <span v-if="hubMinioBusy" class="loading loading-spinner loading-xs" />
+            Simpan job
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button @click="closeHubMinioModal">close</button></form>
+    </dialog>
+
+    <dialog id="delete_hub_minio_job_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="text-lg font-bold">Hapus hub MinIO job?</h3>
+        <p class="py-3 text-sm text-base-content/75">
+          Job MinIO di hub, riwayat run, dan log terkait akan dihapus permanen dari hub.
+        </p>
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost" @click="closeDeleteHubMinioJob">Batal</button>
+          <button type="button" class="btn btn-error" @click="confirmDeleteHubMinioJob">Hapus job</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button @click="closeDeleteHubMinioJob">close</button></form>
     </dialog>
   </AppLayout>
 </template>

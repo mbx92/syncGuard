@@ -931,6 +931,55 @@
       <div class="connection-result" id="smb-result"></div>
     </div>
 
+    <div class="settings-section" id="minio-section">
+      <div class="settings-title">MinIO / S3 Backup <span style="font-weight:400;text-transform:none;color:var(--text3)">— backup ke object storage</span></div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Endpoint</div>
+          <div class="form-hint">Contoh: https://play.min.io atau http://192.168.1.10:9000</div>
+        </div>
+        <input class="form-input mono" id="minio-endpoint" placeholder="https://play.min.io">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Bucket</div>
+          <div class="form-hint">Nama bucket yang sudah dibuat di MinIO</div>
+        </div>
+        <input class="form-input mono" id="minio-bucket" placeholder="syncguard-backups">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Prefix</div>
+          <div class="form-hint">Path prefix di dalam bucket (opsional)</div>
+        </div>
+        <input class="form-input mono" id="minio-prefix" placeholder="syncguard">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Access Key</div>
+        </div>
+        <input class="form-input mono" id="minio-access-key" placeholder="minioadmin" autocomplete="off">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">Secret Key</div>
+        </div>
+        <input class="form-input mono" id="minio-secret-key" type="password" placeholder="•••••••• (isi untuk set/ganti)" autocomplete="new-password">
+      </div>
+      <div class="form-row">
+        <div>
+          <div class="form-label">mc Path</div>
+          <div class="form-hint">Path ke MinIO Client (mc). Download: <a href="https://dl.min.io/client/mc/release/" target="_blank" rel="noreferrer" style="color:var(--teal)">dl.min.io</a></div>
+        </div>
+        <input class="form-input mono" id="minio-mc-path" placeholder="mc">
+      </div>
+      <div class="form-row" style="border-top:none;padding-top:0">
+        <div></div>
+        <button class="btn" onclick="testMinioConnection()">Test Koneksi MinIO</button>
+      </div>
+      <div class="connection-result" id="minio-result"></div>
+    </div>
+
     <div class="settings-section">
       <div class="settings-title">SyncGuard Hub <span style="font-weight:400;text-transform:none;color:var(--text3)">— pusat monitoring</span></div>
       <div class="form-row">
@@ -1121,8 +1170,9 @@
       <label class="modal-label">Sync Engine</label>
       <select class="form-select" id="job-engine" onchange="toggleJobEngineFields()">
         <option value="">(use default from Settings)</option>
-        <option value="rsync">Rsync (SSH)</option>
-        <option value="robocopy">Robocopy (SMB)</option>
+        <option value="rsync">Rsync (SSH ke NAS)</option>
+        <option value="robocopy">Robocopy (SMB ke NAS)</option>
+        <option value="minio">MinIO / S3</option>
       </select>
     </div>
     <div class="modal-form-row" id="job-dest-row" style="display:none">
@@ -1427,15 +1477,20 @@ function toggleJobEngineFields() {
   const engine = sel.value || (config && config.settings && config.settings.syncEngine) || 'rsync';
   const jobType = document.getElementById('job-type').value || 'filesystem';
   const isRobocopy = engine === 'robocopy';
-  const isRsync = engine === 'rsync' || (!isRobocopy && engine === '');
+  const isMinio = engine === 'minio';
+  const isRsync = !isRobocopy && !isMinio;
   document.getElementById('job-dest-row').style.display = isRobocopy ? '' : 'none';
-  document.getElementById('job-nas-profile-row').style.display = isRobocopy ? 'none' : '';
-  document.getElementById('job-options-label').textContent = jobType === 'postgresql'
-    ? (isRobocopy ? 'Robocopy Sync Options' : 'Rsync Sync Options')
-    : (isRobocopy ? 'Robocopy Options' : 'Rsync Options');
-  document.getElementById('job-options').placeholder = isRobocopy
-    ? '/E /Z /R:3 /W:5 /MT:8 /MIR'
-    : '-avz --progress --delete';
+  document.getElementById('job-nas-profile-row').style.display = (isRobocopy || isMinio) ? 'none' : '';
+  const optRow = document.getElementById('job-options').parentElement;
+  optRow.style.display = isMinio ? 'none' : '';
+  if (!isMinio) {
+    document.getElementById('job-options-label').textContent = jobType === 'postgresql'
+      ? (isRobocopy ? 'Robocopy Sync Options' : 'Rsync Sync Options')
+      : (isRobocopy ? 'Robocopy Options' : 'Rsync Options');
+    document.getElementById('job-options').placeholder = isRobocopy
+      ? '/E /Z /R:3 /W:5 /MT:8 /MIR'
+      : '-avz --progress --delete';
+  }
 }
 
 function appendLog(jobId, line, isError) {
@@ -1529,7 +1584,28 @@ function entriesFromRawLines(lines) {
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────
-async function loadStatus() {
+let settingsFormDirty = false;
+
+function isSettingsPageActive() {
+  return document.getElementById('page-settings')?.classList.contains('active');
+}
+
+function shouldReloadSettingsForm(force) {
+  if (force) return true;
+  if (settingsFormDirty) return false;
+  if (isSettingsPageActive()) return false;
+  return true;
+}
+
+function initSettingsFormGuard() {
+  const page = document.getElementById('page-settings');
+  if (!page || page.dataset.guardInit) return;
+  page.dataset.guardInit = '1';
+  page.addEventListener('input', () => { settingsFormDirty = true; }, true);
+  page.addEventListener('change', () => { settingsFormDirty = true; }, true);
+}
+
+async function loadStatus(options = {}) {
   const res = await fetch('/api/status');
   const data = await res.json();
   config = { ...config, ...data };
@@ -1539,7 +1615,9 @@ async function loadStatus() {
   renderJobs();
   updateStats();
   window.nasProfiles = data.nasProfiles || [];
-  loadSettingsForm();
+  if (shouldReloadSettingsForm(!!options.refreshSettings)) {
+    loadSettingsForm();
+  }
   renderNasProfiles();
 }
 
@@ -1700,38 +1778,61 @@ function toggleLog(id) {
 // ── Settings ──────────────────────────────────────────────────────────────
 function loadSettingsForm() {
   if (!config) return;
+  // Don't overwrite a field the user is currently typing in
+  function setVal(id, value) {
+    const el = document.getElementById(id);
+    if (el && el !== document.activeElement) el.value = value;
+  }
   const nas = config.nas || {};
   const settings = config.settings || {};
-  document.getElementById('nas-ip').value = nas.ip || '';
-  document.getElementById('nas-user').value = nas.user || '';
-  document.getElementById('nas-port').value = nas.port || '22';
-  document.getElementById('nas-path').value = nas.basePath || '';
+  setVal('nas-ip', nas.ip || '');
+  setVal('nas-user', nas.user || '');
+  setVal('nas-port', nas.port || '22');
+  setVal('nas-path', nas.basePath || '');
   const nasPw = document.getElementById('nas-password');
-  nasPw.value = '';
-  nasPw.placeholder = nas.passwordSet ? '•••••••• (tersimpan, isi untuk ganti)' : 'Password SSH NAS';
+  if (nasPw && nasPw !== document.activeElement) {
+    nasPw.value = '';
+    nasPw.placeholder = nas.passwordSet ? '•••••••• (tersimpan, isi untuk ganti)' : 'Password SSH NAS';
+  }
   const smbPw = document.getElementById('smb-password');
-  smbPw.value = '';
-  smbPw.placeholder = (settings.smbPasswordSet || nas.passwordSet)
-    ? '•••••••• (tersimpan, isi untuk ganti)'
-    : 'Password SMB / NAS user';
-  document.getElementById('sync-engine').value = settings.syncEngine || 'rsync';
-  document.getElementById('rsync-path').value = settings.rsyncPath || '';
-  document.getElementById('ssh-key').value = settings.sshKeyPath || '';
-  document.getElementById('rsync-opts').value = settings.defaultOptions || '-avz --progress --delete';
-  document.getElementById('smb-share').value = settings.smbShare || '';
-  document.getElementById('robocopy-path').value = settings.robocopyPath || 'robocopy';
-  document.getElementById('robocopy-opts').value = settings.robocopyDefaultOptions || '/E /Z /R:3 /W:5 /MT:8 /MIR';
+  if (smbPw && smbPw !== document.activeElement) {
+    smbPw.value = '';
+    smbPw.placeholder = (settings.smbPasswordSet || nas.passwordSet)
+      ? '•••••••• (tersimpan, isi untuk ganti)'
+      : 'Password SMB / NAS user';
+  }
+  setVal('sync-engine', settings.syncEngine || 'rsync');
+  setVal('rsync-path', settings.rsyncPath || '');
+  setVal('ssh-key', settings.sshKeyPath || '');
+  setVal('rsync-opts', settings.defaultOptions || '-avz --progress --delete');
+  setVal('smb-share', settings.smbShare || '');
+  setVal('robocopy-path', settings.robocopyPath || 'robocopy');
+  setVal('robocopy-opts', settings.robocopyDefaultOptions || '/E /Z /R:3 /W:5 /MT:8 /MIR');
+  const minio = config.minio || {};
+  setVal('minio-endpoint', minio.endpoint || '');
+  setVal('minio-bucket', minio.bucket || '');
+  setVal('minio-prefix', minio.prefix !== undefined ? minio.prefix : 'syncguard');
+  setVal('minio-access-key', minio.accessKey || '');
+  const minioSecretEl = document.getElementById('minio-secret-key');
+  if (minioSecretEl && minioSecretEl !== document.activeElement) {
+    minioSecretEl.value = '';
+    minioSecretEl.placeholder = minio.secretKeySet ? '•••••••• (tersimpan, isi untuk ganti)' : '•••••••• (isi untuk set/ganti)';
+  }
+  setVal('minio-mc-path', settings.mcPath || '');
   toggleEngineSettings();
   loadSshKeyStatus();
   showRsyncStatus();
   const hub = config.hub || {};
-  document.getElementById('hub-enabled').checked = !!hub.enabled;
-  document.getElementById('hub-url').value = hub.url || '';
-  document.getElementById('hub-agent-id').value = hub.agentId || '';
+  const hubEnabled = document.getElementById('hub-enabled');
+  if (hubEnabled && hubEnabled !== document.activeElement) hubEnabled.checked = !!hub.enabled;
+  setVal('hub-url', hub.url || '');
+  setVal('hub-agent-id', hub.agentId || '');
   const hubKey = document.getElementById('hub-api-key');
-  hubKey.value = '';
-  hubKey.placeholder = (hub.apiKeySet || hub.apiKey) ? '•••••••• (tersimpan)' : 'apiKey dari hub';
-  document.getElementById('hub-log-mode').value = hub.logPushMode || 'summary';
+  if (hubKey && hubKey !== document.activeElement) {
+    hubKey.value = '';
+    hubKey.placeholder = (hub.apiKeySet || hub.apiKey) ? '•••••••• (tersimpan)' : 'apiKey dari hub';
+  }
+  setVal('hub-log-mode', hub.logPushMode || 'summary');
   loadHubStatus();
 }
 
@@ -2038,10 +2139,19 @@ async function saveSettings() {
     defaultOptions: document.getElementById('rsync-opts').value.trim() || '-avz --progress --delete',
     robocopyPath: document.getElementById('robocopy-path').value.trim() || 'robocopy',
     robocopyDefaultOptions: document.getElementById('robocopy-opts').value.trim() || '/E /Z /R:3 /W:5 /MT:8 /MIR',
-    smbShare: document.getElementById('smb-share').value.trim()
+    smbShare: document.getElementById('smb-share').value.trim(),
+    mcPath: document.getElementById('minio-mc-path').value.trim() || 'mc'
   };
   const smbPw = document.getElementById('smb-password').value;
   if (smbPw) settingsUpdate.smbPassword = smbPw;
+  const minioUpdate = {
+    endpoint: document.getElementById('minio-endpoint').value.trim(),
+    bucket: document.getElementById('minio-bucket').value.trim(),
+    prefix: document.getElementById('minio-prefix').value.trim(),
+    accessKey: document.getElementById('minio-access-key').value.trim()
+  };
+  const minioSecret = document.getElementById('minio-secret-key').value;
+  if (minioSecret) minioUpdate.secretKey = minioSecret;
   const hubUpdate = {
     enabled: document.getElementById('hub-enabled').checked,
     url: document.getElementById('hub-url').value.trim(),
@@ -2053,11 +2163,40 @@ async function saveSettings() {
   await fetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ settings: settingsUpdate, hub: hubUpdate })
+    body: JSON.stringify({ settings: settingsUpdate, minio: minioUpdate, hub: hubUpdate })
   });
   toast('Settings saved!', 'ok');
-  loadStatus();
-  loadHubStatus();
+  settingsFormDirty = false;
+  await loadStatus({ refreshSettings: true });
+}
+
+async function testMinioConnection() {
+  const resultEl = document.getElementById('minio-result');
+  setResult(resultEl, '', 'Menghubungi MinIO…');
+  const body = {
+    endpoint: document.getElementById('minio-endpoint').value.trim(),
+    bucket: document.getElementById('minio-bucket').value.trim(),
+    prefix: document.getElementById('minio-prefix').value.trim(),
+    accessKey: document.getElementById('minio-access-key').value.trim(),
+    mcPath: document.getElementById('minio-mc-path').value.trim() || 'mc'
+  };
+  const secretKey = document.getElementById('minio-secret-key').value;
+  if (secretKey) body.secretKey = secretKey;
+  try {
+    const res = await fetch('/api/minio/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setResult(resultEl, 'ok', `Koneksi berhasil${data.version ? ' — mc ' + esc(data.version) : ''}`);
+    } else {
+      setResult(resultEl, 'fail', esc(data.error || 'Koneksi gagal'));
+    }
+  } catch (e) {
+    setResult(resultEl, 'fail', 'Tidak dapat menghubungi server');
+  }
 }
 
 async function testConnection(engine) {
@@ -2329,7 +2468,10 @@ function showPage(name) {
     t.classList.toggle('active', ['dashboard','settings','logs'][i] === name);
   });
   if (name === 'logs') loadAllLogs();
-  if (name === 'settings') loadServerInfo();
+  if (name === 'settings') {
+    loadServerInfo();
+    if (!settingsFormDirty) loadSettingsForm();
+  }
 }
 
 function scheduleLabel(s) {
@@ -2359,6 +2501,7 @@ function toast(msg, type = 'ok') {
 // ── Init ──────────────────────────────────────────────────────────────────
 initStaticIcons();
 initTheme();
+initSettingsFormGuard();
 connectWS();
 loadStatus();
 loadServerInfo();

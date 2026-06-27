@@ -14,7 +14,10 @@ const emptyStore = () => ({
   audit: [],
   hubPostgresJobs: [],
   hubPostgresRuns: [],
-  hubPostgresLogTail: []
+  hubPostgresLogTail: [],
+  hubMinioJobs: [],
+  hubMinioRuns: [],
+  hubMinioLogTail: []
 });
 
 function loadStore() {
@@ -332,6 +335,74 @@ function getHubPostgresLogTail(store, jobId, runId, limit = 200) {
   return rows.slice(-limit).map((row) => row.text);
 }
 
+// ─── Hub MinIO Jobs ───────────────────────────────────────────────────────────
+
+function listHubMinioJobs(store) {
+  return [...(store.hubMinioJobs || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function getHubMinioJob(store, jobId) {
+  return (store.hubMinioJobs || []).find((j) => j.id === jobId) || null;
+}
+
+function upsertHubMinioJob(store, job) {
+  const jobs = store.hubMinioJobs || (store.hubMinioJobs = []);
+  const idx = jobs.findIndex((r) => r.id === job.id);
+  if (idx >= 0) {
+    jobs[idx] = { ...jobs[idx], ...job, updatedAt: new Date().toISOString() };
+    return jobs[idx];
+  }
+  const row = { enabled: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...job };
+  jobs.push(row);
+  return row;
+}
+
+function deleteHubMinioJob(store, jobId) {
+  const existing = getHubMinioJob(store, jobId);
+  if (!existing) return { ok: false, error: 'Hub MinIO job not found' };
+  store.hubMinioJobs = (store.hubMinioJobs || []).filter((j) => j.id !== jobId);
+  const runIds = new Set((store.hubMinioRuns || []).filter((r) => r.jobId === jobId).map((r) => r.id));
+  store.hubMinioRuns = (store.hubMinioRuns || []).filter((r) => r.jobId !== jobId);
+  store.hubMinioLogTail = (store.hubMinioLogTail || []).filter((l) => !runIds.has(l.runId) && l.jobId !== jobId);
+  return { ok: true, removed: existing };
+}
+
+function addHubMinioRun(store, run) {
+  const row = { id: run.id || `hubmc-run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, createdAt: new Date().toISOString(), ...run };
+  (store.hubMinioRuns || (store.hubMinioRuns = [])).push(row);
+  return row;
+}
+
+function updateHubMinioRun(store, runId, patch) {
+  const run = (store.hubMinioRuns || []).find((r) => r.id === runId);
+  if (!run) return null;
+  Object.assign(run, patch);
+  return run;
+}
+
+function listHubMinioRuns(store, jobId) {
+  let rows = [...(store.hubMinioRuns || [])];
+  if (jobId) rows = rows.filter((r) => r.jobId === jobId);
+  return rows.sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
+}
+
+function addHubMinioLogLines(store, jobId, runId, lines, level = 'info') {
+  const existing = (store.hubMinioLogTail || []).filter((r) => r.runId === runId);
+  let lineNo = existing.length ? Math.max(...existing.map((r) => r.lineNo)) : 0;
+  for (const text of lines) {
+    lineNo += 1;
+    (store.hubMinioLogTail || (store.hubMinioLogTail = [])).push({ jobId, runId, lineNo, text, level, createdAt: new Date().toISOString() });
+  }
+}
+
+function getHubMinioLogTail(store, jobId, runId, limit = 200) {
+  let rows = [...(store.hubMinioLogTail || [])];
+  if (jobId) rows = rows.filter((r) => r.jobId === jobId);
+  if (runId) rows = rows.filter((r) => r.runId === runId);
+  rows.sort((a, b) => a.lineNo - b.lineNo);
+  return rows.slice(-limit).map((r) => r.text);
+}
+
 module.exports = {
   loadStore,
   saveStore,
@@ -359,5 +430,14 @@ module.exports = {
   updateHubPostgresRun,
   listHubPostgresRuns,
   addHubPostgresLogLines,
-  getHubPostgresLogTail
+  getHubPostgresLogTail,
+  listHubMinioJobs,
+  getHubMinioJob,
+  upsertHubMinioJob,
+  deleteHubMinioJob,
+  addHubMinioRun,
+  updateHubMinioRun,
+  listHubMinioRuns,
+  addHubMinioLogLines,
+  getHubMinioLogTail
 };
