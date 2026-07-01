@@ -482,6 +482,19 @@
     margin-bottom: 14px;
   }
 
+  .settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-top: 4px;
+    padding-top: 4px;
+  }
+
+  .settings-actions + .connection-result {
+    margin-top: 12px;
+  }
+
   .form-label {
     font-size: 13px;
     color: var(--text2);
@@ -624,6 +637,7 @@
 
   .toast.show { transform: translateY(0); opacity: 1; }
   .toast.ok { border-color: var(--green); color: var(--green); }
+  .toast.warn { border-color: var(--amber); color: var(--amber); }
   .toast.err { border-color: var(--red); color: var(--red); }
 
   /* ── Logs page ── */
@@ -838,9 +852,9 @@
         </div>
         <input class="form-input mono" id="nas-path" placeholder="/volume1/backup">
       </div>
-      <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
-        <button class="btn primary" onclick="saveNasConfig()">Save NAS Config</button>
-        <button class="btn" onclick="testConnection()">Test Connection</button>
+      <div class="settings-actions">
+        <button class="btn primary" type="button" onclick="saveNasConfig()">Save NAS Config</button>
+        <button class="btn" type="button" onclick="testConnection()">Test Connection</button>
       </div>
       <div class="connection-result" id="conn-result"></div>
 
@@ -850,7 +864,7 @@
         <button class="btn" onclick="generateSshKey()">Generate SSH Key</button>
         <button class="btn primary" onclick="deploySshKey()">Deploy SSH Key ke NAS</button>
       </div>
-      <p style="font-size:11px;color:var(--text3);margin-bottom:12px">Deploy mengirim public key ke <code style="font-family:var(--mono)">~/.ssh/authorized_keys</code> di NAS (seperti ssh-copy-id). Setelah sukses, backup rsync tidak perlu password lagi.</p>
+      <p style="font-size:11px;color:var(--text3);margin-bottom:12px">Deploy mengirim public key ke <code style="font-family:var(--mono)">~/.ssh/authorized_keys</code> di NAS (seperti ssh-copy-id). Synology: permission home harus bukan 777 — diperbaiki otomatis saat deploy. Setelah sukses, backup rsync tidak perlu password lagi.</p>
       <div class="connection-result" id="ssh-deploy-result"></div>
     </div>
 
@@ -936,21 +950,21 @@
       <div class="form-row">
         <div>
           <div class="form-label">Endpoint</div>
-          <div class="form-hint">Contoh: https://play.min.io atau http://192.168.1.10:9000</div>
+          <div class="form-hint">IP lokal OK — gunakan port <strong>API</strong> (biasanya <code>:9000</code>), bukan Console (<code>:9090</code>). Contoh: <code>http://10.10.10.50:9000</code></div>
         </div>
-        <input class="form-input mono" id="minio-endpoint" placeholder="https://play.min.io">
+        <input class="form-input mono" id="minio-endpoint" placeholder="http://192.168.1.10:9000">
       </div>
       <div class="form-row">
         <div>
           <div class="form-label">Bucket</div>
-          <div class="form-hint">Nama bucket yang sudah dibuat di MinIO</div>
+          <div class="form-hint">Nama bucket yang sudah dibuat di MinIO (wajib)</div>
         </div>
         <input class="form-input mono" id="minio-bucket" placeholder="syncguard-backups">
       </div>
       <div class="form-row">
         <div>
           <div class="form-label">Prefix</div>
-          <div class="form-hint">Path prefix di dalam bucket (opsional)</div>
+          <div class="form-hint">Folder di dalam bucket (bukan nama bucket). File → <code style="font-family:var(--mono)">bucket/prefix/nama-job/</code></div>
         </div>
         <input class="form-input mono" id="minio-prefix" placeholder="syncguard">
       </div>
@@ -971,11 +985,11 @@
           <div class="form-label">mc Path</div>
           <div class="form-hint">Path ke MinIO Client (mc). Download: <a href="https://dl.min.io/client/mc/release/" target="_blank" rel="noreferrer" style="color:var(--teal)">dl.min.io</a></div>
         </div>
-        <input class="form-input mono" id="minio-mc-path" placeholder="mc">
+        <input class="form-input mono" id="minio-mc-path" placeholder="tools/mc/mc.exe">
       </div>
-      <div class="form-row" style="border-top:none;padding-top:0">
-        <div></div>
-        <button class="btn" onclick="testMinioConnection()">Test Koneksi MinIO</button>
+      <div class="settings-actions">
+        <button class="btn primary" type="button" onclick="saveMinioConfig()">Save MinIO Config</button>
+        <button class="btn" type="button" onclick="testMinioConnection()">Test Koneksi MinIO</button>
       </div>
       <div class="connection-result" id="minio-result"></div>
     </div>
@@ -1058,9 +1072,9 @@
         <p><strong style="color:var(--text)">2. cwRsync (standalone)</strong></p>
         <p style="margin-left:16px;margin-bottom:8px">Download dari <a href="https://itefix.net/cwrsync" style="color:var(--accent)">itefix.net/cwrsync</a>, lalu set path ke <code style="font-family:var(--mono);font-size:12px;color:var(--teal)">C:\cwrsync\bin\rsync.exe</code></p>
         <p><strong style="color:var(--text)">SSH Key (tanpa password prompt)</strong></p>
-        <p style="margin-left:16px;color:var(--text3);font-family:var(--mono);font-size:12px">
-          ssh-keygen -t ed25519 -C "syncguard"<br>
-          ssh-copy-id admin@192.168.1.100
+        <p style="margin-left:16px;color:var(--text3);font-size:12px;margin-bottom:4px">
+          Di tab Settings NAS: klik <strong>Generate SSH Key</strong> lalu <strong>Deploy SSH Key ke NAS</strong>.
+          Installer offline tidak memerlukan OpenSSH / <code>ssh-keygen</code> di Windows.
         </p>
       </div>
     </div>
@@ -1108,7 +1122,7 @@
     </div>
     <div class="modal-form-row">
       <label class="modal-label">Job Name *</label>
-      <input class="form-input" id="job-name" placeholder="e.g. Documents, ProjectFiles">
+      <input class="form-input" id="job-name" placeholder="e.g. Documents, ProjectFiles" oninput="updateJobMinioDestPreview()">
     </div>
     <div class="modal-form-row" id="job-source-row">
       <label class="modal-label">Source Path (Local) *</label>
@@ -1175,6 +1189,11 @@
         <option value="minio">MinIO / S3</option>
       </select>
     </div>
+    <div class="modal-form-row" id="job-minio-dest-row" style="display:none">
+      <label class="modal-label">Tujuan MinIO</label>
+      <div id="job-minio-dest-preview" class="mono" style="font-size:12px;color:var(--teal);line-height:1.5;padding:6px 0">—</div>
+      <div class="form-hint">Dari Settings → MinIO (bucket + prefix). PostgreSQL: file dump di folder ini.</div>
+    </div>
     <div class="modal-form-row" id="job-dest-row" style="display:none">
       <label class="modal-label">Destination Path (UNC)</label>
       <input class="form-input mono" id="job-dest" placeholder="\\192.168.1.100\backup\JobName (kosongkan = auto)">
@@ -1195,6 +1214,7 @@
         <option value="0 4 1 * *">Monthly (1st, 4:00 AM)</option>
         <option value="custom">Custom cron...</option>
       </select>
+      <div class="form-hint" style="margin-top:6px">Job terjadwal tetap bisa dijalankan kapan saja dengan tombol <strong>Run Now</strong>.</div>
     </div>
     <div class="modal-form-row" id="custom-cron-row" style="display:none">
       <label class="modal-label">Custom Cron Expression</label>
@@ -1426,15 +1446,39 @@ function getJobType(job) {
   return job.jobType || 'filesystem';
 }
 
+function formatMinioJobDestination(minio, jobName) {
+  const bucket = (minio?.bucket || '').trim();
+  const prefix = String(minio?.prefix ?? 'syncguard').replace(/^\/+|\/+$/g, '');
+  const safe = String(jobName || 'job').trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '') || 'backup';
+  const parts = [prefix, safe].filter(Boolean);
+  const key = parts.join('/');
+  if (!bucket) return `MinIO: bucket belum diset → ${key}/`;
+  return `s3://${bucket}/${key}/`;
+}
+
 function getJobDestination(job) {
+  if (job.destination) return job.destination;
   const engine = getJobEngine(job);
+  if (engine === 'minio') {
+    return formatMinioJobDestination(config?.minio, job.name);
+  }
   if (engine === 'robocopy') {
     if (job.destPath) return job.destPath;
     const share = (config.settings && config.settings.smbShare || '').replace(/\\+$/, '');
     return share ? `${share}\\${job.name}` : '—';
   }
-  if (config.nas) return `${config.nas.ip}:${config.nas.basePath}/${job.name}`;
+  if (config.nas) return `${config.nas.user}@${config.nas.ip}:${config.nas.basePath}/${job.name}`;
   return '—';
+}
+
+function getJobDisplayName(job, jobs) {
+  const list = jobs || config?.jobs || [];
+  const dupes = list.filter(j => j.name === job.name).length > 1;
+  if (!dupes) return job.name;
+  const engine = getJobEngine(job);
+  const type = getJobType(job) === 'postgresql' ? 'PostgreSQL' : 'Folder';
+  const sched = job.schedule && job.schedule !== 'manual' ? ' · terjadwal' : '';
+  return `${job.name} (${engine}, ${type}${sched})`;
 }
 
 function getJobPrimaryPath(job) {
@@ -1472,6 +1516,13 @@ function toggleJobTypeFields() {
   toggleJobEngineFields();
 }
 
+function updateJobMinioDestPreview() {
+  const el = document.getElementById('job-minio-dest-preview');
+  if (!el) return;
+  const jobName = document.getElementById('job-name').value.trim() || 'nama-job';
+  el.textContent = formatMinioJobDestination(config?.minio, jobName);
+}
+
 function toggleJobEngineFields() {
   const sel = document.getElementById('job-engine');
   const engine = sel.value || (config && config.settings && config.settings.syncEngine) || 'rsync';
@@ -1480,7 +1531,9 @@ function toggleJobEngineFields() {
   const isMinio = engine === 'minio';
   const isRsync = !isRobocopy && !isMinio;
   document.getElementById('job-dest-row').style.display = isRobocopy ? '' : 'none';
+  document.getElementById('job-minio-dest-row').style.display = isMinio ? '' : 'none';
   document.getElementById('job-nas-profile-row').style.display = (isRobocopy || isMinio) ? 'none' : '';
+  if (isMinio) updateJobMinioDestPreview();
   const optRow = document.getElementById('job-options').parentElement;
   optRow.style.display = isMinio ? 'none' : '';
   if (!isMinio) {
@@ -1664,6 +1717,7 @@ function renderJobs() {
 }
 
 function renderJobCard(job) {
+  const jobs = config ? config.jobs : [];
   const s = allStatus[job.id] || { status: 'idle' };
   const isRunning = s.status === 'running';
   const schedLabel = scheduleLabel(job.schedule);
@@ -1675,7 +1729,7 @@ function renderJobCard(job) {
     <div class="job-header">
       <div class="job-status-dot ${s.status}" id="dot-${job.id}"></div>
       <div class="job-info">
-        <div class="job-name">${esc(job.name)}</div>
+        <div class="job-name">${esc(getJobDisplayName(job, jobs))}</div>
         <div class="job-path">${esc(getJobPrimaryPath(job))}</div>
         ${job.description ? `<div class="job-desc">${esc(job.description)}</div>` : ''}
       </div>
@@ -1684,7 +1738,7 @@ function renderJobCard(job) {
     <div class="job-meta">
       <div class="job-meta-item">Type: <span>${isPostgres ? 'postgresql' : 'filesystem'}</span></div>
       <div class="job-meta-item">Engine: <span>${getJobEngine(job)}</span></div>
-      <div class="job-meta-item">Tujuan: <span>${esc(getJobDestination(job))}</span></div>
+      <div class="job-meta-item">Tujuan: <span title="${esc(getJobDestination(job))}">${esc(getJobDestination(job))}</span></div>
       <div class="job-meta-item">Schedule: <span>${schedLabel}</span></div>
       ${isPostgres ? `<div class="job-meta-item">Format: <span>${getJobDumpFormatLabel(job)}</span></div>` : ''}
       ${isPostgres ? `<div class="job-meta-item">User DB: <span>${esc(pg.username || '—')}</span></div>` : ''}
@@ -1699,7 +1753,7 @@ function renderJobCard(job) {
     <div class="job-actions">
       ${isRunning
         ? `<button class="btn stop" onclick="stopJob('${job.id}')">${btnLabel(I.stop, 'Stop')}</button>`
-        : `<button class="btn primary" onclick="runJob('${job.id}')">${btnLabel(I.play, 'Run Now')}</button>`
+        : `<button class="btn primary" id="run-btn-${job.id}" onclick="runJob('${job.id}')">${btnLabel(I.play, 'Run Now')}</button>`
       }
       <button class="btn" onclick="toggleLog('${job.id}')">${btnLabel(I.clipboard, 'Log')}</button>
       <button class="btn" onclick="editJob('${job.id}')">${btnLabel(I.pencil, 'Edit')}</button>
@@ -1738,13 +1792,55 @@ function updateJobProgress(jobId, p) {
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────
+async function saveMinioConfig(options = {}) {
+  const minioUpdate = {
+    endpoint: document.getElementById('minio-endpoint').value.trim(),
+    bucket: document.getElementById('minio-bucket').value.trim(),
+    prefix: document.getElementById('minio-prefix').value.trim(),
+    accessKey: document.getElementById('minio-access-key').value.trim()
+  };
+  const minioSecret = document.getElementById('minio-secret-key').value;
+  if (minioSecret) minioUpdate.secretKey = minioSecret;
+  const mcPath = document.getElementById('minio-mc-path').value.trim() || 'mc';
+  await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minio: minioUpdate, settings: { mcPath } })
+  });
+  if (!options.silent) {
+    toast('MinIO config saved!', 'ok');
+    settingsFormDirty = false;
+    await loadStatus({ refreshSettings: true });
+  }
+}
+
 async function runJob(id) {
-  allStatus[id] = { ...allStatus[id], status: 'running', progress: 0 };
-  updateJobCard(id);
-  const res = await fetch(`/api/jobs/${id}/run`, { method: 'POST' });
-  const data = await res.json();
-  if (data.error && !data.success) {
-    toast(data.error, 'err');
+  if (allStatus[id]?.status === 'running') {
+    toast('Job masih berjalan — tunggu selesai atau klik Stop.', 'warn');
+    return;
+  }
+  const job = (config?.jobs || []).find(j => j.id === id);
+  const engine = job?.syncEngine || document.getElementById('sync-engine')?.value || 'rsync';
+  if (engine === 'minio') {
+    await saveMinioConfig({ silent: true });
+  }
+  const runBtn = document.getElementById(`run-btn-${id}`);
+  if (runBtn) runBtn.disabled = true;
+  const isPostgres = job && getJobType(job) === 'postgresql';
+  toast(isPostgres ? 'Backup dimulai (dump DB bisa 1–5 menit)…' : 'Backup dimulai…', 'ok');
+  try {
+    const res = await fetch(`/api/jobs/${id}/run`, { method: 'POST' });
+    const data = await res.json();
+    if (data.error || data.success === false) {
+      toast(data.error || 'Backup gagal', 'err');
+    } else if (data.success) {
+      toast(`Backup selesai (${data.duration ?? '?'}s)`, 'ok');
+    }
+  } catch (e) {
+    toast('Gagal menjalankan job', 'err');
+  } finally {
+    if (runBtn) runBtn.disabled = false;
+    await loadStatus();
   }
 }
 
@@ -1818,7 +1914,7 @@ function loadSettingsForm() {
     minioSecretEl.value = '';
     minioSecretEl.placeholder = minio.secretKeySet ? '•••••••• (tersimpan, isi untuk ganti)' : '•••••••• (isi untuk set/ganti)';
   }
-  setVal('minio-mc-path', settings.mcPath || '');
+  setVal('minio-mc-path', settings.mcPath || 'tools/mc/mc.exe');
   toggleEngineSettings();
   loadSshKeyStatus();
   showRsyncStatus();
@@ -2172,7 +2268,8 @@ async function saveSettings() {
 
 async function testMinioConnection() {
   const resultEl = document.getElementById('minio-result');
-  setResult(resultEl, '', 'Menghubungi MinIO…');
+  setResult(resultEl, '', 'Menyimpan config & menghubungi MinIO…');
+  await saveMinioConfig({ silent: true });
   const body = {
     endpoint: document.getElementById('minio-endpoint').value.trim(),
     bucket: document.getElementById('minio-bucket').value.trim(),

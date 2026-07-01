@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncGuard — Dokumentasi Sistem</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --bg-card: #1a2332;
+      --bg-code: #0d1117;
+      --border: #2d3a4f;
+      --text: #e6edf3;
+      --text-muted: #8b9cb3;
+      --accent: #3b82f6;
+      --accent-dim: rgba(59, 130, 246, 0.15);
+      --green: #34d399;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --sidebar-w: 280px;
+      --radius: 8px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f8fa;
+        --bg-card: #ffffff;
+        --bg-code: #f0f3f6;
+        --border: #d0d7de;
+        --text: #1f2328;
+        --text-muted: #656d76;
+        --accent-dim: rgba(59, 130, 246, 0.1);
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 1.5rem 0;
+      z-index: 100;
+    }
+    .sidebar-brand {
+      padding: 0 1.25rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    .sidebar-brand h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .sidebar-brand p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    .sidebar nav a {
+      display: block;
+      padding: 0.4rem 1.25rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+    .sidebar nav a:hover {
+      color: var(--text);
+      background: var(--accent-dim);
+      border-left-color: var(--accent);
+    }
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      max-width: 900px;
+      padding: 2.5rem 3rem 4rem;
+    }
+    .hero {
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .hero .meta { color: var(--text-muted); font-size: 0.9rem; }
+    .hero .badges { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    section { margin-bottom: 2.5rem; scroll-margin-top: 1.5rem; }
+    h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 1.25rem 0 0.6rem;
+      color: var(--text);
+    }
+    p { margin-bottom: 0.85rem; }
+    ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+    li { margin-bottom: 0.35rem; }
+    a { color: var(--accent); }
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 0.85em;
+      background: var(--bg-code);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      margin: 0.75rem 0 1.25rem;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+    pre code { background: none; border: none; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0 1.25rem;
+      font-size: 0.875rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.75rem;
+      text-align: left;
+    }
+    th { background: var(--bg-card); font-weight: 600; }
+    tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin: 1rem 0;
+    }
+    .card-title { font-weight: 600; margin-bottom: 0.5rem; color: var(--accent); }
+    .diagram {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      font-family: Consolas, monospace;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      overflow-x: auto;
+      white-space: pre;
+      margin: 1rem 0;
+    }
+    .tip {
+      border-left: 4px solid var(--green);
+      background: rgba(52, 211, 153, 0.08);
+      padding: 0.75rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .warn {
+      border-left: 4px solid var(--amber);
+      background: rgba(251, 191, 36, 0.08);
+      padding: 0.75rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; padding: 1.5rem; }
+    }
+    @media print {
+      .sidebar { display: none; }
+      .main { margin-left: 0; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h1>SyncGuard</h1>
+        <p>Dokumentasi Sistem v1.0.0</p>
+      </div>
+      <nav>
+        <a href="#ringkasan">Ringkasan</a>
+        <a href="#arsitektur">Arsitektur</a>
+        <a href="#komponen">Komponen</a>
+        <a href="#instalasi">Instalasi</a>
+        <a href="#menjalankan">Menjalankan</a>
+        <a href="#konfigurasi">Konfigurasi Agent</a>
+        <a href="#jenis-job">Jenis Job</a>
+        <a href="#engine">Engine Sinkronisasi</a>
+        <a href="#cron">Penjadwalan</a>
+        <a href="#hub">SyncGuard Hub</a>
+        <a href="#api">API Reference</a>
+        <a href="#struktur">Struktur Direktori</a>
+        <a href="#keamanan">Keamanan</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+        <a href="#dokumen">Dokumen Terkait</a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="hero">
+        <h1>SyncGuard — Dokumentasi Sistem</h1>
+        <p class="meta">Manajer backup NAS berbasis web · Agent portable Windows · Hub terpusat</p>
+        <div class="badges">
+          <span class="badge">Agent :7432</span>
+          <span class="badge">Hub :7443</span>
+          <span class="badge">Rsync · Robocopy · MinIO</span>
+          <span class="badge">PostgreSQL</span>
+        </div>
+      </header>
+
+      <section id="ringkasan">
+        <h2>Ringkasan</h2>
+        <p><strong>SyncGuard</strong> adalah aplikasi manajemen backup yang memungkinkan Anda menjalankan banyak job backup dari satu dashboard web. Mendukung sinkronisasi ke Synology NAS (SSH/rsync), share SMB (Robocopy), dan object storage MinIO/S3.</p>
+        <table>
+          <thead><tr><th>Kemampuan</th><th>Detail</th></tr></thead>
+          <tbody>
+            <tr><td>Multi-job</td><td>Banyak job dengan jadwal cron atau manual</td></tr>
+            <tr><td>Real-time</td><td>Progress &amp; log via WebSocket</td></tr>
+            <tr><td>PostgreSQL</td><td><code>pg_dump</code> + upload ke NAS/MinIO</td></tr>
+            <tr><td>Hub</td><td>Monitor banyak agent dari satu dashboard</td></tr>
+            <tr><td>Portable</td><td>Node.js + cwRsync bundled di Windows</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="arsitektur">
+        <h2>Arsitektur</h2>
+        <div class="diagram">┌─────────────────────────────────────────────────────────────────┐
+│                     SyncGuard Hub (opsional)                    │
+│  Vue 3 Dashboard · Agent registry · Log retention · PG/MinIO    │
+│                         :7443                                   │
+└────────────────────────────▲────────────────────────────────────┘
+                             │ HTTPS / HTTP
+                             │ register · heartbeat · logs · commands
+┌────────────────────────────┴────────────────────────────────────┐
+│                    SyncGuard Agent (per server)                   │
+│  Express + WebSocket · node-cron · config/config.json           │
+│                         :7432                                     │
+└──────┬──────────────┬──────────────┬─────────────────────────────┘
+       │              │              │
+   Rsync/SSH      Robocopy/SMB      MinIO (mc)
+       │              │              │
+       ▼              ▼              ▼
+   Synology NAS   UNC Share      S3 / MinIO bucket</div>
+        <h3>Alur job backup</h3>
+        <ol>
+          <li><strong>Trigger</strong> — cron, Run Now, atau perintah remote dari Hub</li>
+          <li><strong>Validasi</strong> — engine, kredensial, binary (<code>rsync</code>, <code>pg_dump</code>, <code>mc</code>)</li>
+          <li><strong>Eksekusi</strong> — filesystem langsung sync; PostgreSQL: dump lalu sync/upload</li>
+          <li><strong>Log</strong> — ke <code>logs/{jobId}.log</code> + broadcast WebSocket</li>
+          <li><strong>Hub</strong> — status &amp; log summary dikirim jika Hub aktif</li>
+        </ol>
+      </section>
+
+      <section id="komponen">
+        <h2>Komponen</h2>
+        <h3>Agent (<code>backend/</code>)</h3>
+        <table>
+          <thead><tr><th>Modul</th><th>Fungsi</th></tr></thead>
+          <tbody>
+            <tr><td><code>server.js</code></td><td>HTTP API, WebSocket, cron, orchestrasi job</td></tr>
+            <tr><td><code>rsync-util.js</code></td><td>Build argumen rsync, test SSH</td></tr>
+            <tr><td><code>ssh.js</code></td><td>Generate/deploy SSH key ke NAS</td></tr>
+            <tr><td><code>postgres-util.js</code></td><td><code>pg_dump</code>, retention dump lokal</td></tr>
+            <tr><td><code>minio-util.js</code></td><td>Upload/mirror via MinIO Client</td></tr>
+            <tr><td><code>agent-hub.js</code></td><td>Koneksi ke Hub pusat</td></tr>
+            <tr><td><code>log-rotate.js</code></td><td>Rotasi log per job</td></tr>
+          </tbody>
+        </table>
+        <h3>Hub (<code>hub/</code>)</h3>
+        <p>Dashboard Vue 3 untuk monitoring agent, retensi log, job PostgreSQL/MinIO di server, dan perintah remote ke agent.</p>
+      </section>
+
+      <section id="instalasi">
+        <h2>Instalasi</h2>
+        <div class="card">
+          <div class="card-title">Windows Portable (disarankan)</div>
+          <ol>
+            <li>Jalankan <code>setup-portable.bat</code></li>
+            <li>Buka <a href="http://localhost:7432">http://localhost:7432</a></li>
+          </ol>
+          <p>Tidak perlu install Node.js jika <code>tools/node/</code> ikut di-copy.</p>
+        </div>
+        <h3>Linux (systemd)</h3>
+        <pre><code>npm install --omit=dev
+chmod +x scripts/linux/*.sh
+sudo ./scripts/linux/install-agent-service.sh \
+  --user syncguard --app-dir /opt/syncguard --port 7432</code></pre>
+        <h3>Hub lokal / Docker</h3>
+        <pre><code>npm run hub:install && npm run hub:build && npm run hub
+# atau
+start-hub-docker.bat</code></pre>
+      </section>
+
+      <section id="menjalankan">
+        <h2>Menjalankan Aplikasi</h2>
+        <table>
+          <thead><tr><th>Platform</th><th>Perintah</th><th>Keterangan</th></tr></thead>
+          <tbody>
+            <tr><td>Windows</td><td><code>SyncGuard.exe</code> / <code>SyncGuard.vbs</code></td><td>Start hidden</td></tr>
+            <tr><td>Windows</td><td><code>start.bat</code></td><td>Mode konsol (debug)</td></tr>
+            <tr><td>Windows</td><td><code>stop.bat</code></td><td>Hentikan server</td></tr>
+            <tr><td>Linux</td><td><code>systemctl start syncguard-agent</code></td><td>Service systemd</td></tr>
+            <tr><td>Hub</td><td><code>start-hub.bat</code></td><td>Dashboard :7443</td></tr>
+          </tbody>
+        </table>
+        <p>Port diubah via env <code>PORT</code>, mis. <code>PORT=8080 npm start</code>.</p>
+      </section>
+
+      <section id="konfigurasi">
+        <h2>Konfigurasi Agent</h2>
+        <p>File utama: <code>config/config.json</code> (lokal, tidak di-commit).</p>
+
+        <h3>NAS / SSH (Rsync)</h3>
+        <table>
+          <thead><tr><th>Field</th><th>Keterangan</th></tr></thead>
+          <tbody>
+            <tr><td>IP Address</td><td>IP Synology/NAS</td></tr>
+            <tr><td>SSH User</td><td>User SSH (mis. <code>cwrsync</code>)</td></tr>
+            <tr><td>SSH Port</td><td>Default <code>22</code> atau custom <code>2222</code></td></tr>
+            <tr><td>Base Backup Path</td><td>Path di NAS, mis. <code>/volume1/backup</code></td></tr>
+          </tbody>
+        </table>
+        <div class="warn">
+          <strong>SSH Key wajib untuk backup rsync di Windows.</strong> Setelah ganti password Synology: isi password baru → Save → Deploy SSH Key ulang. Key ada di <code>config/keys/syncguard_ed25519</code>.
+        </div>
+
+        <h3>Robocopy (SMB)</h3>
+        <p>SMB Share Path: <code>\\192.168.1.100\backup</code>. Exit code 0–7 = sukses.</p>
+
+        <h3>MinIO</h3>
+        <table>
+          <thead><tr><th>Field</th><th>Keterangan</th></tr></thead>
+          <tbody>
+            <tr><td>Endpoint</td><td>URL MinIO/S3</td></tr>
+            <tr><td>Bucket Name</td><td><strong>Wajib</strong> — klik Save MinIO Config</td></tr>
+            <tr><td>Prefix</td><td>Folder awal di bucket (default <code>syncguard</code>)</td></tr>
+          </tbody>
+        </table>
+        <p>Path upload: <code>s3://{bucket}/{prefix}/{nama-job}/{file}</code></p>
+
+        <h3>SyncGuard Hub (di agent)</h3>
+        <p>Enabled, Hub URL (URL publik), Agent ID, API Key dari Hub → Settings.</p>
+      </section>
+
+      <section id="jenis-job">
+        <h2>Jenis Job</h2>
+        <h3>Filesystem (folder sync)</h3>
+        <ul>
+          <li><strong>Source Path</strong> — folder lokal</li>
+          <li><strong>Dest Path</strong> — opsional override di NAS</li>
+          <li><strong>Exclusions</strong> — pola skip (mis. <code>node_modules</code>, <code>.git</code>)</li>
+          <li><strong>Schedule</strong> — cron atau <code>manual</code></li>
+        </ul>
+
+        <h3>PostgreSQL</h3>
+        <ol>
+          <li>Fase <strong>dump</strong> — <code>pg_dump</code> → file ber-timestamp</li>
+          <li>Fase <strong>sync</strong> — rsync ke NAS atau <code>mc cp</code> ke MinIO</li>
+        </ol>
+        <div class="tip">
+          Setiap run membuat <strong>file dump baru</strong>. File lama di NAS tidak menghalangi run manual. Job terjadwal dan Run Now tidak saling memblokir.
+        </div>
+      </section>
+
+      <section id="engine">
+        <h2>Engine Sinkronisasi</h2>
+        <table>
+          <thead><tr><th>Engine</th><th>Platform</th><th>Target</th></tr></thead>
+          <tbody>
+            <tr><td><strong>rsync</strong></td><td>Win/Linux</td><td>NAS via SSH</td></tr>
+            <tr><td><strong>robocopy</strong></td><td>Windows only</td><td>SMB/UNC</td></tr>
+            <tr><td><strong>minio</strong></td><td>Win/Linux</td><td>S3/MinIO bucket</td></tr>
+          </tbody>
+        </table>
+        <h3>Opsi Rsync</h3>
+        <pre><code>-avz              archive + verbose + compress
+--delete          hapus file di NAS yang tidak ada di lokal
+--dry-run         simulasi</code></pre>
+        <h3>Opsi Robocopy</h3>
+        <pre><code>/E                copy subfolder
+/MIR              mirror (hati-hati)
+/Z                restartable
+/MT:8             multi-threaded</code></pre>
+      </section>
+
+      <section id="cron">
+        <h2>Penjadwalan (Cron)</h2>
+        <table>
+          <thead><tr><th>Expression</th><th>Arti</th></tr></thead>
+          <tbody>
+            <tr><td><code>0 2 * * *</code></td><td>Setiap hari jam 02:00</td></tr>
+            <tr><td><code>0 * * * *</code></td><td>Setiap jam</td></tr>
+            <tr><td><code>0 3 * * 0</code></td><td>Setiap Minggu jam 03:00</td></tr>
+            <tr><td><code>*/30 * * * *</code></td><td>Setiap 30 menit</td></tr>
+            <tr><td><code>manual</code></td><td>Hanya Run Now</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="hub">
+        <h2>SyncGuard Hub</h2>
+        <p>Dashboard pusat di port <strong>7443</strong> untuk memantau banyak agent, melihat history run/log, dan mengirim perintah remote.</p>
+        <h3>Mendaftarkan Agent</h3>
+        <ol>
+          <li>Hub → Settings → buat agent → salin API Key</li>
+          <li>Di agent → Settings → SyncGuard Hub: Enabled, URL, Agent ID, API Key</li>
+          <li>Simpan &amp; restart agent</li>
+        </ol>
+        <h3>Deploy Docker/Coolify</h3>
+        <ul>
+          <li>Dockerfile: <code>docker/hub/Dockerfile</code></li>
+          <li>Volume: <code>/data</code> (persistent)</li>
+          <li>Env: <code>HUB_ADMIN_TOKEN</code>, <code>HUB_PUBLIC_URL</code></li>
+          <li>Health: <code>GET /api/v1/health</code></li>
+        </ul>
+      </section>
+
+      <section id="api">
+        <h2>API Reference</h2>
+        <h3>Agent (port 7432)</h3>
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Keterangan</th></tr></thead>
+          <tbody>
+            <tr><td>GET</td><td><code>/api/config</code></td><td>Baca konfigurasi</td></tr>
+            <tr><td>POST</td><td><code>/api/config</code></td><td>Simpan konfigurasi</td></tr>
+            <tr><td>GET</td><td><code>/api/status</code></td><td>Status semua job</td></tr>
+            <tr><td>POST</td><td><code>/api/jobs/:id/run</code></td><td>Jalankan job</td></tr>
+            <tr><td>POST</td><td><code>/api/jobs/:id/stop</code></td><td>Hentikan job</td></tr>
+            <tr><td>GET</td><td><code>/api/jobs/:id/log</code></td><td>Log job</td></tr>
+            <tr><td>POST</td><td><code>/api/ssh/deploy-key</code></td><td>Deploy SSH key</td></tr>
+            <tr><td>POST</td><td><code>/api/minio/test</code></td><td>Test MinIO</td></tr>
+          </tbody>
+        </table>
+        <p>WebSocket (port sama): event <code>job_status</code>, <code>job_log</code>, <code>jobs_updated</code>.</p>
+
+        <h3>Hub (port 7443)</h3>
+        <p><strong>Agent:</strong> header <code>Authorization: Bearer {apiKey}</code> — register, heartbeat, logs, commands.</p>
+        <p><strong>Admin:</strong> header <code>X-Admin-Token: {token}</code> — daftar agent, PG/MinIO jobs, audit.</p>
+      </section>
+
+      <section id="struktur">
+        <h2>Struktur Direktori</h2>
+        <pre><code>syncguard/
+├── backend/           # Agent server
+├── frontend/          # Dashboard agent (index.html)
+├── hub/               # Hub (jangan copy ke USB portable)
+├── config/            # config.json + SSH keys
+├── logs/              # Log per job
+├── tools/node/        # Node.js portable
+├── tools/cwrsync/     # cwRsync
+├── docker/            # Dockerfile & compose
+├── docs/              # Dokumentasi
+├── start.bat
+└── package.json</code></pre>
+      </section>
+
+      <section id="keamanan">
+        <h2>Keamanan</h2>
+        <ul>
+          <li>Jangan commit <code>config/config.json</code> — berisi password &amp; key</li>
+          <li>Ganti default admin token Hub (<code>Admin123!</code>) di production</li>
+          <li>Gunakan HTTPS untuk Hub di internet</li>
+          <li>Home directory user SSH Synology: permission <code>755</code>, bukan <code>777</code></li>
+          <li>Rotate Agent API Key jika bocor</li>
+        </ul>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <table>
+          <thead><tr><th>Masalah</th><th>Solusi</th></tr></thead>
+          <tbody>
+            <tr><td>rsync not found</td><td><code>install-cwrsync.bat</code> atau set Rsync Path</td></tr>
+            <tr><td>SSH Permission denied</td><td>Deploy SSH Key ulang setelah ganti password</td></tr>
+            <tr><td>MinIO sukses, file tidak ada</td><td>Isi Bucket Name → Save MinIO Config</td></tr>
+            <tr><td>Job PG Run Now "gagal"</td><td>Tunggu selesai; cek job yang benar (rsync vs minio)</td></tr>
+            <tr><td>Hub agent offline</td><td>Hub URL reachable; Agent ID + API Key cocok</td></tr>
+            <tr><td>SMB/Robocopy gagal</td><td>Aktifkan SMB; test <code>dir \\IP\share</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="dokumen">
+        <h2>Dokumen Terkait</h2>
+        <table>
+          <thead><tr><th>File</th><th>Isi</th></tr></thead>
+          <tbody>
+            <tr><td><a href="../README.md">README.md</a></td><td>Quick start</td></tr>
+            <tr><td><a href="../PORTABLE.md">PORTABLE.md</a></td><td>Mode portable Windows</td></tr>
+            <tr><td><a href="../HUB.md">HUB.md</a></td><td>Hub &amp; registrasi agent</td></tr>
+            <tr><td><a href="../COOLIFY.md">COOLIFY.md</a></td><td>Deploy Docker/Coolify</td></tr>
+            <tr><td><a href="../LINUX.md">LINUX.md</a></td><td>Agent Linux systemd</td></tr>
+            <tr><td><a href="DOCUMENTATION.md">DOCUMENTATION.md</a></td><td>Versi Markdown</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <footer class="footer">
+        SyncGuard v1.0.0 — Dokumentasi dihasilkan untuk proyek SyncGuard NAS Backup Manager.
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

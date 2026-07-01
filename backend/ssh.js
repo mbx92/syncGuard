@@ -1,10 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const { Client } = require('ssh2');
 
 const KEYS_DIR = path.join(__dirname, '../config/keys');
 const KEY_BASENAME = 'syncguard_ed25519';
+const PROJECT_ROOT = path.join(__dirname, '..');
+const KEY_COMMENT = 'syncguard-backup';
 
 function ensureKeysDir() {
   if (!fs.existsSync(KEYS_DIR)) fs.mkdirSync(KEYS_DIR, { recursive: true });
@@ -41,7 +44,9 @@ function getKeyStatus(config) {
     hasDefaultKey: fs.existsSync(paths.privateKey),
     hasPublicKey: fs.existsSync(paths.publicKey),
     usingCustomPath: !!(custom && custom === resolved),
-    keyDeployed: !!config.settings?.sshKeyDeployed
+    keyDeployed: !!config.settings?.sshKeyDeployed,
+    keyGenMethod: 'node-crypto',
+    sshKeygenPath: resolveSshKeygenPath()
   };
 }
 
@@ -51,46 +56,104 @@ function readPublicKey() {
   return fs.readFileSync(publicKey, 'utf8').trim();
 }
 
-function generateKeyPair() {
-  ensureKeysDir();
-  const { privateKey, publicKey } = getKeyPaths();
-
-  if (fs.existsSync(privateKey)) {
-    return Promise.resolve({ ok: true, existed: true, privateKey, publicKey });
+/** Cari ssh-keygen di bundle cwRsync, Windows OpenSSH, atau PATH. */
+function resolveSshKeygenPath() {
+  const candidates = [];
+  if (process.platform === 'win32') {
+    candidates.push(
+      path.join(PROJECT_ROOT, 'tools', 'cwrsync', 'bin', 'ssh-keygen.exe'),
+      path.join(process.env.WINDIR || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh-keygen.exe')
+    );
   }
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return 'ssh-keygen';
+}
 
+function sshWireEncode(typeStr, data) {
+  const type = Buffer.from(typeStr);
+  const lenType = Buffer.alloc(4);
+  lenType.writeUInt32BE(type.length, 0);
+  const lenData = Buffer.alloc(4);
+  lenData.writeUInt32BE(data.length, 0);
+  return Buffer.concat([lenType, type, lenData, data]);
+}
+
+function encodeEd25519PublicKey(publicKey, comment = KEY_COMMENT) {
+  const jwk = publicKey.export({ format: 'jwk' });
+  const raw = Buffer.from(jwk.x, 'base64url');
+  const wire = sshWireEncode('ssh-ed25519', raw);
+  return `ssh-ed25519 ${wire.toString('base64')} ${comment}`;
+}
+
+/** Generate ed25519 key pair tanpa ssh-keygen — untuk portable/offline builder. */
+function generateKeyPairWithNode(privateKeyPath, publicKeyPath) {
+  try {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+    const pubLine = encodeEd25519PublicKey(publicKey);
+    fs.writeFileSync(privateKeyPath, privatePem, { encoding: 'utf8', mode: 0o600 });
+    fs.writeFileSync(publicKeyPath, `${pubLine}\n`, { encoding: 'utf8' });
+    return { ok: true, method: 'node-crypto' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function generateKeyPairWithExec(privateKeyPath, publicKeyPath) {
+  const keygenPath = resolveSshKeygenPath();
   return new Promise((resolve) => {
-    // execFile + no shell: argumen tidak di-parse ulang oleh cmd.exe (hindari "Too many arguments")
     const args = [
       '-q',
       '-t', 'ed25519',
-      '-f', privateKey,
+      '-f', privateKeyPath,
       '-N', '',
-      '-C', 'syncguard-backup'
+      '-C', KEY_COMMENT
     ];
 
-    execFile('ssh-keygen', args, { windowsHide: true }, (err, stdout, stderr) => {
-      if (!err && fs.existsSync(privateKey)) {
-        resolve({ ok: true, privateKey, publicKey });
+    execFile(keygenPath, args, { windowsHide: true }, (err, stdout, stderr) => {
+      if (!err && fs.existsSync(privateKeyPath)) {
+        resolve({ ok: true, method: 'ssh-keygen', keygenPath });
         return;
       }
-
       const msg = (stderr || stdout || err?.message || '').trim();
       resolve({
         ok: false,
-        error: msg || 'ssh-keygen gagal. Pastikan OpenSSH Client terpasang (Settings → Apps → Optional Features).'
+        error: msg || `ssh-keygen gagal (${keygenPath})`,
+        keygenPath
       });
     });
   });
 }
 
+async function generateKeyPair() {
+  ensureKeysDir();
+  const { privateKey, publicKey } = getKeyPaths();
+
+  if (fs.existsSync(privateKey)) {
+    return { ok: true, existed: true, privateKey, publicKey };
+  }
+
+  const nodeResult = generateKeyPairWithNode(privateKey, publicKey);
+  if (nodeResult.ok) {
+    return { ok: true, privateKey, publicKey, method: nodeResult.method };
+  }
+
+  const execResult = await generateKeyPairWithExec(privateKey, publicKey);
+  if (execResult.ok) {
+    return { ok: true, privateKey, publicKey, method: execResult.method };
+  }
+
+  return {
+    ok: false,
+    error: nodeResult.error || execResult.error || 'Gagal generate SSH key.'
+  };
+}
+
 function sanitizeSshError(msg) {
   if (!msg) return '';
-  let s = String(msg)
-    .replace(/\*\* WARNING:[\s\S]*?openssh\.com\/pq\.html\r?\n?/gi, '')
-    .replace(/Permission denied, please try again\.[\r\n]*/gi, '')
-    .replace(/\r/g, '')
-    .trim();
+  let s = stripSshNoise(msg);
   if (/All configured authentication methods failed/i.test(s)) {
     return 'Login ditolak NAS — password salah atau user tidak punya akses SSH.';
   }
@@ -101,6 +164,15 @@ function sanitizeSshError(msg) {
     return 'Login ditolak NAS — password atau SSH key salah.';
   }
   return s || 'SSH auth gagal';
+}
+
+/** OpenSSH PQ warning on stderr — informational, bukan kegagalan backup. */
+function stripSshNoise(text) {
+  return String(text || '')
+    .replace(/\*\* WARNING:[\s\S]*?openssh\.com\/pq\.html\r?\n?/gi, '')
+    .replace(/Permission denied, please try again\.[\r\n]*/gi, '')
+    .replace(/\r/g, '')
+    .trim();
 }
 
 function sshConnect(config, opts = {}) {
@@ -174,6 +246,24 @@ async function testSshConnection(config, opts = {}) {
   }
 }
 
+async function fixNasSshHomePermissions(config, opts = {}) {
+  let conn;
+  try {
+    conn = await sshConnect(config, { password: opts.password ?? config.nas?.password, useKey: false });
+    const result = await execCommand(conn, [
+      'chmod go-w "$HOME" 2>/dev/null || chmod 755 "$HOME"',
+      'chmod 700 "$HOME/.ssh" 2>/dev/null || true',
+      'chmod 600 "$HOME/.ssh/authorized_keys" 2>/dev/null || true',
+      'echo FIX_OK'
+    ].join(' && '));
+    return { ok: result.stdout.includes('FIX_OK') };
+  } catch (e) {
+    return { ok: false, error: sanitizeSshError(e.message) };
+  } finally {
+    if (conn) conn.end();
+  }
+}
+
 async function deployPublicKey(config, opts = {}) {
   const gen = await generateKeyPair();
   if (!gen.ok) return gen;
@@ -194,6 +284,7 @@ async function deployPublicKey(config, opts = {}) {
 
     const escapedKey = pubKey.replace(/'/g, "'\\''");
     const cmd = [
+      'chmod go-w "$HOME" 2>/dev/null || chmod 755 "$HOME"',
       'mkdir -p ~/.ssh',
       'chmod 700 ~/.ssh',
       `grep -qxF '${escapedKey}' ~/.ssh/authorized_keys 2>/dev/null || echo '${escapedKey}' >> ~/.ssh/authorized_keys`,
@@ -240,12 +331,15 @@ module.exports = {
   getKeyPaths,
   resolveSshKeyPath,
   resolveActiveSshKeyPath,
+  resolveSshKeygenPath,
   getKeyStatus,
   generateKeyPair,
   sshConnect,
   testSshConnection,
   deployPublicKey,
+  fixNasSshHomePermissions,
   sanitizeNasForClient,
   sanitizeSettingsForClient,
-  sanitizeSshError
+  sanitizeSshError,
+  stripSshNoise
 };

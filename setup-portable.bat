@@ -40,6 +40,13 @@ if not exist "tools\cwrsync\bin\rsync.exe" (
 ) else (
     echo  [3/5] cwRsync sudah ada di tools\cwrsync\
 )
+
+if not exist "tools\mc\mc.exe" (
+    echo         Install MinIO Client mc ke tools\mc\ ...
+    call install-mc.bat
+) else (
+    echo         mc sudah ada di tools\mc\
+)
 echo.
 
 echo  [4/5] Buat icon dan shortcut Desktop...

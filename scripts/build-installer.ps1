@@ -36,6 +36,21 @@ if (-not $iscc) {
 Write-Host "Building installer version: $Version"
 Write-Host "ISCC: $iscc"
 
+$mcBundled = Join-Path $AppDir 'tools\mc\mc.exe'
+$mcRoot = Join-Path $AppDir 'mc.exe'
+if (-not (Test-Path $mcBundled)) {
+    if (Test-Path $mcRoot) {
+        $mcDir = Split-Path $mcBundled
+        New-Item -ItemType Directory -Force -Path $mcDir | Out-Null
+        Copy-Item -Path $mcRoot -Destination $mcBundled -Force
+        Write-Host "mc.exe disalin ke tools\mc\ untuk installer offline."
+    } else {
+        Write-Warning 'mc.exe tidak ditemukan. Letakkan mc.exe di root project atau tools\mc\ sebelum build installer MinIO offline.'
+    }
+} else {
+    Write-Host "mc.exe bundled: tools\mc\mc.exe"
+}
+
 & $iscc "/DMyAppVersion=$Version" $IssPath
 if ($LASTEXITCODE -ne 0) {
     throw "Build installer gagal (exit $LASTEXITCODE)."

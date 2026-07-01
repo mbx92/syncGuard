@@ -43,7 +43,7 @@ const defaultConfig = {
     syncEngine: 'rsync',
     rsyncPath: 'tools/cwrsync/bin/rsync.exe',
     pgDumpPath: 'pg_dump',
-    mcPath: 'mc',
+    mcPath: 'tools/mc/mc.exe',
     sshKeyPath: '',
     defaultOptions: '-avz --progress --delete',
     robocopyPath: 'robocopy',
@@ -148,13 +148,13 @@ function buildRobocopyCommand(job, config) {
 function buildMinioMirrorCommand(job, config) {
   const minio = { ...defaultConfig.minio, ...config.minio };
   const localPath = getJobRuntimeSource(job);
-  const ctx = minioUtil.buildMirrorContext(minio, config.settings, localPath, job.name);
+  const dest = minioUtil.formatJobDestination(minio, job.name);
   return {
     engine: 'minio',
-    executable: ctx.executable,
-    args: ctx.args,
-    env: ctx.env,
-    commandLabel: `mc ${ctx.args.join(' ')}`
+    mode: 'sanitized-mirror',
+    localPath,
+    minio,
+    commandLabel: `mc cp (normalisasi path) ${localPath} → ${dest.uri}`
   };
 }
 
@@ -233,6 +233,27 @@ function getJobRuntimeSource(job) {
   return getJobType(job) === 'postgresql'
     ? postgresUtil.getJobDumpDir(job.id)
     : job.sourcePath;
+}
+
+function resolveJobDestination(job, config) {
+  const engine = getJobSyncEngine(job, config);
+  if (engine === 'minio') {
+    const minio = { ...defaultConfig.minio, ...config.minio };
+    const dest = minioUtil.formatJobDestination(minio, job.name);
+    if (dest.warning) return `${dest.uri} (bucket belum diset)`;
+    return dest.uri;
+  }
+  if (engine === 'robocopy') {
+    if (job.destPath) return job.destPath;
+    const share = (config.settings.smbShare || '').replace(/\\+$/, '');
+    return share ? `${share}\\${job.name}` : '—';
+  }
+  const nas = rsyncUtil.getEffectiveNas(job, config);
+  if (nas?.ip) {
+    const base = (nas.basePath || '').replace(/\/+$/, '');
+    return `${nas.user}@${nas.ip}:${base}/${job.name}`;
+  }
+  return '—';
 }
 
 function sanitizeJobForStatus(job) {
@@ -319,6 +340,9 @@ function mergeConfigUpdate(current, body) {
     updated.minio = { ...defaultConfig.minio, ...current.minio, ...minioRest };
     if (secretKey !== undefined && secretKey !== '') {
       updated.minio.secretKeyEncrypted = minioUtil.encryptSecretKey(secretKey);
+    }
+    if (updated.minio.endpoint) {
+      updated.minio.endpoint = minioUtil.normalizeMinioEndpoint(updated.minio.endpoint);
     }
   }
   if (body.hub) {
@@ -422,6 +446,12 @@ function stopProcess(jobId) {
   const proc = activeProcesses[jobId];
   if (!proc) return false;
 
+  if (typeof proc.cancel === 'function') {
+    proc.cancel();
+    delete activeProcesses[jobId];
+    return true;
+  }
+
   if (process.platform === 'win32' && proc.pid) {
     exec(`taskkill /F /T /PID ${proc.pid}`, () => {});
   } else {
@@ -470,10 +500,14 @@ function attachProcessLogs(jobId, proc, handlers = {}) {
   });
 
   proc.stderr.on('data', (data) => {
-    const line = data.toString().trim();
-    if (!line) return;
-    writeLog(jobId, `ERR: ${line}`);
-    handlers.onStderrLine?.(line);
+    const cleaned = ssh.stripSshNoise(data.toString());
+    if (!cleaned) return;
+    cleaned.split('\n').forEach((line) => {
+      const t = line.trim();
+      if (!t) return;
+      writeLog(jobId, `ERR: ${t}`);
+      handlers.onStderrLine?.(t);
+    });
   });
 }
 
@@ -569,6 +603,10 @@ async function runPostgresJob(jobId, job, config, startTime) {
   let syncCmd;
   if (jobEngine === 'minio') {
     const minio = { ...defaultConfig.minio, ...config.minio };
+    const minioCheck = minioUtil.validateMinioConfig(minio);
+    if (!minioCheck.ok) {
+      return finalizeJobResult(jobId, job, startTime, { success: false, error: minioCheck.error, message: minioCheck.error });
+    }
     syncCmd = buildMinioUploadCommand(minio, config.settings, dumpResult.outputFile, job.name);
   } else {
     const syncJob = { ...job, sourcePath: dumpResult.dumpDir };
@@ -588,7 +626,10 @@ async function runPostgresJob(jobId, job, config, startTime) {
   writeLog(jobId, `Command: ${syncCmd.commandLabel}`);
   if (jobEngine === 'minio') {
     const minio = { ...defaultConfig.minio, ...config.minio };
-    writeLog(jobId, `Destination: s3://${minio.bucket}/${minioUtil.formatMinioObjectKey(minio, job.name, dumpResult.fileName)}`);
+    const loc = minioUtil.describeMinioUploadLocation(minio, job.name, dumpResult.fileName);
+    writeLog(jobId, `Destination: ${loc.uri}`);
+    if (loc.warning) writeLog(jobId, `WARNING: ${loc.warning}`);
+    writeLog(jobId, `Browse: ${loc.browseHint}`);
   }
 
   const syncResult = await new Promise((resolve) => {
@@ -637,6 +678,21 @@ async function runPostgresJob(jobId, job, config, startTime) {
     });
   });
 
+  if (syncResult.success && jobEngine === 'minio') {
+    const minio = { ...defaultConfig.minio, ...config.minio };
+    const safeDumpName = minioUtil.sanitizeObjectKeyPart(dumpResult.fileName);
+    const verify = await minioUtil.verifyMinioObject(minio, config.settings, job.name, safeDumpName);
+    if (!verify.ok) {
+      syncResult.success = false;
+      syncResult.error = verify.error;
+      syncResult.message = verify.error;
+    } else {
+      writeLog(jobId, `Verified: ${verify.uri}`);
+      const loc = minioUtil.describeMinioUploadLocation(minio, job.name, dumpResult.fileName);
+      writeLog(jobId, `MinIO object: bucket "${loc.bucket}" → ${loc.objectKey}`);
+    }
+  }
+
   if (syncResult.success) {
     postgresUtil.cleanupOldDumps(job);
   }
@@ -650,8 +706,8 @@ async function runJob(jobId) {
   const job = config.jobs.find(j => j.id === jobId);
   if (!job) return { error: 'Job not found' };
 
-  if (activeProcesses[jobId]) {
-    return { error: 'Job already running' };
+  if (activeProcesses[jobId] || jobStatus[jobId]?.status === 'running') {
+    return { error: 'Job masih berjalan. Tunggu selesai atau klik Stop sebelum menjalankan lagi.' };
   }
 
   const engine = getJobSyncEngine(job, config);
@@ -700,6 +756,11 @@ async function runJob(jobId) {
   }
 
   if (engine === 'minio') {
+    const minio = { ...defaultConfig.minio, ...config.minio };
+    const minioCheck = minioUtil.validateMinioConfig(minio);
+    if (!minioCheck.ok) {
+      return { error: minioCheck.error };
+    }
     const mcTest = await minioUtil.testMcBinary(minioUtil.getEffectiveMcPath(config.settings));
     if (!mcTest.ok) {
       return { error: mcTest.error };
@@ -730,6 +791,58 @@ async function runJob(jobId) {
 
   if (getJobType(job) === 'postgresql') {
     return runPostgresJob(jobId, job, config, startTime);
+  }
+
+  if (engine === 'minio' && syncCmd.mode === 'sanitized-mirror') {
+    const cancelToken = { cancelled: false };
+    let mcChild = null;
+    activeProcesses[jobId] = {
+      cancel: () => {
+        cancelToken.cancelled = true;
+        if (mcChild) {
+          try {
+            if (process.platform === 'win32' && mcChild.pid) {
+              exec(`taskkill /F /T /PID ${mcChild.pid}`, () => {});
+            } else {
+              mcChild.kill('SIGTERM');
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    };
+
+    return minioUtil.runSanitizedMinioMirror(
+      syncCmd.minio,
+      config.settings,
+      syncCmd.localPath,
+      job.name,
+      {
+        onLog: (line) => {
+          writeLog(jobId, line);
+          const progress = minioUtil.parseMcOutput(line);
+          if (progress) {
+            Object.assign(jobStatus[jobId], progress);
+            broadcast({ type: 'job_progress', jobId, ...progress, line });
+          } else {
+            broadcast({ type: 'job_log', jobId, line });
+          }
+        },
+        onProgress: (progress) => {
+          Object.assign(jobStatus[jobId], progress);
+          broadcast({ type: 'job_progress', jobId, ...progress });
+        },
+        isCancelled: () => cancelToken.cancelled,
+        registerProc: (proc) => { mcChild = proc; }
+      }
+    ).then((result) => finalizeJobResult(jobId, job, startTime, {
+      success: !!result.success,
+      error: result.error,
+      message: result.message || (result.success ? 'backup selesai' : result.error)
+    })).catch((err) => finalizeJobResult(jobId, job, startTime, {
+      success: false,
+      error: err.message,
+      message: err.message
+    }));
   }
 
   return new Promise((resolve) => {
@@ -769,15 +882,18 @@ async function runJob(jobId) {
     });
 
     proc.stderr.on('data', (data) => {
-      const line = data.toString().trim();
-      if (line) {
-        writeLog(jobId, `ERR: ${line}`);
-        const isRsyncMissing = /not recognized|not found|ENOENT/i.test(line);
+      const cleaned = ssh.stripSshNoise(data.toString());
+      if (!cleaned) return;
+      cleaned.split('\n').forEach((line) => {
+        const t = line.trim();
+        if (!t) return;
+        writeLog(jobId, `ERR: ${t}`);
+        const isRsyncMissing = /not recognized|not found|ENOENT/i.test(t);
         const hint = isRsyncMissing
           ? ' — Set Rsync Path di Settings ke C:\\cwrsync\\bin\\rsync.exe atau wsl rsync'
           : '';
-        broadcast({ type: 'job_log', jobId, line: `[stderr] ${line}${hint}`, isError: true });
-      }
+        broadcast({ type: 'job_log', jobId, line: `[stderr] ${t}${hint}`, isError: true });
+      });
     });
 
     proc.on('close', (code) => {
@@ -948,6 +1064,7 @@ app.get('/api/status', (req, res) => {
   const config = loadConfig();
   const jobs = config.jobs.map(job => ({
     ...sanitizeJobForStatus(job),
+    destination: resolveJobDestination(job, config),
     status: jobStatus[job.id] || { status: 'idle' }
   }));
   res.json({
@@ -999,6 +1116,10 @@ app.delete('/api/jobs/:id', (req, res) => {
 // POST /api/jobs/:id/run
 app.post('/api/jobs/:id/run', async (req, res) => {
   const result = await runJob(req.params.id);
+  if (result?.error) {
+    res.json({ success: false, error: result.error });
+    return;
+  }
   res.json(result);
 });
 
@@ -1107,7 +1228,7 @@ app.post('/api/minio/test', async (req, res) => {
   const minioConfig = {
     ...defaultConfig.minio,
     ...config.minio,
-    endpoint: body.endpoint || config.minio?.endpoint || '',
+    endpoint: minioUtil.normalizeMinioEndpoint(body.endpoint || config.minio?.endpoint || ''),
     bucket: body.bucket || config.minio?.bucket || '',
     prefix: body.prefix !== undefined ? body.prefix : (config.minio?.prefix || 'syncguard'),
     accessKey: body.accessKey || config.minio?.accessKey || '',
@@ -1151,10 +1272,15 @@ app.post('/api/ssh/deploy-key', async (req, res) => {
     cfg.settings.sshKeyDeployed = true;
     saveConfig(cfg);
 
-    const verify = await rsyncUtil.testRsyncSshKeyAuth(cfg, cfg.settings.sshKeyPath || ssh.resolveActiveSshKeyPath(cfg));
+    const keyPath = ssh.resolveSshKeyPath(cfg);
+    let verify = await rsyncUtil.testRsyncSshKeyAuth(cfg, keyPath);
+    if (!verify.ok) {
+      await ssh.fixNasSshHomePermissions(cfg, { password: req.body.password || cfg.nas?.password });
+      verify = await rsyncUtil.testRsyncSshKeyAuth(cfg, keyPath);
+    }
     result.verified = verify.ok;
     if (!verify.ok) {
-      result.warning = `Key terkirim, tapi login via cwRsync SSH gagal: ${verify.error}. Pastikan user NAS "${cfg.nas.user}" benar dan Deploy dilakukan ke user yang sama.`;
+      result.warning = `Key terkirim, tapi login via cwRsync SSH gagal: ${verify.error}. Pastikan user NAS "${cfg.nas.user}" benar.`;
       cfg.settings.sshKeyDeployed = false;
       saveConfig(cfg);
     }
@@ -1290,6 +1416,12 @@ if (rsyncUtil.isRsyncPathConfigured(cfg.settings)) {
   console.log(`[SyncGuard] Rsync bundled: ${rsyncUtil.getBundledCwRsyncPath()}`);
 } else {
   console.log('[SyncGuard] Rsync: belum diinstall — jalankan install-cwrsync.bat');
+}
+
+if (minioUtil.isBundledMcInstalled()) {
+  console.log(`[SyncGuard] MinIO Client bundled: ${minioUtil.getBundledMcPath()}`);
+} else {
+  console.log('[SyncGuard] mc: belum diinstall — jalankan install-mc.bat untuk job MinIO');
 }
 
 lifecycle.registerShutdownHook(() => {

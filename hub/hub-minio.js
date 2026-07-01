@@ -173,41 +173,30 @@ function finalizeRun(job, run, result) {
 }
 
 async function runFolderMirror(job, run) {
-  return new Promise((resolve) => {
-    const ctx = minioUtil.buildMirrorContext(job.minio, { mcPath: job.minio.mcPath }, job.sourceDir, job.name);
-    appendLog(job.id, run.id, `Command: ${ctx.executable} ${ctx.args.join(' ')}`);
+  const cancelToken = { cancelled: false };
+  activeRuns.set(job.id, { cancel: () => { cancelToken.cancelled = true; }, runId: run.id });
 
-    const proc = spawn(ctx.executable, ctx.args, { shell: false, env: ctx.env });
-    activeRuns.set(job.id, { proc, runId: run.id });
+  appendLog(job.id, run.id, `Command: mc cp (normalisasi path) ${job.sourceDir} → MinIO`);
 
-    proc.stdout.on('data', (data) => {
-      data.toString().split('\n').forEach((line) => {
-        if (line.trim()) appendLog(job.id, run.id, line);
-      });
-    });
+  const result = await minioUtil.runSanitizedMinioMirror(
+    job.minio,
+    { mcPath: job.minio.mcPath },
+    job.sourceDir,
+    job.name,
+    {
+      onLog: (line) => appendLog(job.id, run.id, line),
+      onProgress: () => {},
+      isCancelled: () => cancelToken.cancelled
+    }
+  );
 
-    proc.stderr.on('data', (data) => {
-      data.toString().split('\n').forEach((line) => {
-        if (line.trim()) appendLog(job.id, run.id, `[mc] ${line}`, 'error');
-      });
-    });
-
-    proc.on('error', (err) => {
-      const error = err.code === 'ENOENT'
-        ? `MinIO Client (mc) tidak ditemukan: ${ctx.executable}. Download dari https://dl.min.io/client/mc/release/`
-        : err.message;
-      appendLog(job.id, run.id, error, 'error');
-      resolve({ success: false, error, message: error });
-    });
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve({ success: true, message: 'mirror ke MinIO selesai' });
-      } else {
-        resolve({ success: false, error: `mc mirror gagal (exit ${code})`, message: `mc mirror gagal (exit ${code})` });
-      }
-    });
-  });
+  if (result.cancelled) {
+    return { success: false, error: 'Backup dibatalkan', message: 'dibatalkan' };
+  }
+  if (!result.success) {
+    return { success: false, error: result.error, message: result.error };
+  }
+  return { success: true, message: result.message || 'upload ke MinIO selesai' };
 }
 
 async function runPostgresDump(job, run) {
@@ -372,7 +361,13 @@ async function runJob(jobId, trigger = 'manual') {
 function stopJob(jobId) {
   const active = activeRuns.get(jobId);
   if (!active) return { ok: false, error: 'Job tidak sedang berjalan' };
-  active.proc.kill(process.platform === 'win32' ? undefined : 'SIGTERM');
+  if (typeof active.cancel === 'function') {
+    active.cancel();
+    return { ok: true };
+  }
+  if (active.proc) {
+    active.proc.kill(process.platform === 'win32' ? undefined : 'SIGTERM');
+  }
   return { ok: true };
 }
 

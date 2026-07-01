@@ -344,7 +344,11 @@ async function testRsyncConnection(config, opts = {}) {
   }
 
   if (keyPath) {
-    const keyResult = await testRsyncSshKeyAuth(config, keyPath);
+    let keyResult = await testRsyncSshKeyAuth(config, keyPath);
+    if (!keyResult.ok && config.nas?.password) {
+      await ssh.fixNasSshHomePermissions(config);
+      keyResult = await testRsyncSshKeyAuth(config, keyPath);
+    }
     if (keyResult.ok) {
       return { ...keyResult, authMethod: 'ssh-key' };
     }

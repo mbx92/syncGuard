@@ -18,5 +18,7 @@ config/syncguard.pid
 config/keys/
 tools/cwrsync/bin/
 !tools/cwrsync/README.md
+tools/mc/mc.exe
+!tools/mc/README.md
 tools/node/
 !tools/node/README.md

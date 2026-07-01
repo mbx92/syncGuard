@@ -74,7 +74,9 @@ Source: "{#SourcePath}\..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignorever
 
 ; Bundled offline tools
 Source: "{#SourcePath}\..\tools\cwrsync\*"; DestDir: "{app}\tools\cwrsync"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourcePath}\..\tools\mc\*"; DestDir: "{app}\tools\mc"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourcePath}\..\tools\node\*"; DestDir: "{app}\tools\node"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourcePath}\..\mc.exe"; DestDir: "{app}\tools\mc"; DestName: "mc.exe"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Offline runtime dependencies
 Source: "{#SourcePath}\..\node_modules\*"; DestDir: "{app}\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -88,6 +90,7 @@ Source: "{#SourcePath}\..\SyncGuard.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\..\SyncGuard-Stop.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\..\install-node.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\..\install-cwrsync.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\..\install-mc.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\..\setup-portable.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\..\install-startup.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\..\remove-startup.bat"; DestDir: "{app}"; Flags: ignoreversion

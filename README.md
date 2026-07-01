@@ -204,6 +204,11 @@ SyncGuard menganggap exit code **0-7** sebagai sukses. Exit code `>= 8` dianggap
 - Cek SMB Share Path, mis. `\\192.168.1.100\backup`
 - Test manual: `dir \\192.168.1.100\backup`
 
+**SSH connection failed / spawn ssh-keygen ENOENT**
+
+- Installer offline tidak menyertakan OpenSSH Client — gunakan versi terbaru yang generate key via Node.js (tombol **Generate SSH Key** di UI).
+- Restart agent setelah update.
+
 **SSH connection failed**
 
 - Pastikan SSH aktif

@@ -39,12 +39,15 @@ install-cwrsync.bat
 ```
 tools/node/   ← Node.js LTS bundled (~30 MB)
 tools/cwrsync/← rsync for Windows
+tools/mc/     ← MinIO Client (mc.exe)
 config/       ← settings & password (lokal)
 logs/         ← backup logs + syncguard-server.log
 node_modules/
 ```
 
 Copy folder ke USB atau PC lain — **tanpa install Node.js** di PC tujuan (asalkan `tools/node/` ikut ter-copy).
+
+**MinIO:** jalankan `install-mc.bat` sekali jika `tools/mc/mc.exe` belum ada (atau letakkan `mc.exe` di root project sebelum setup).
 
 **Jangan copy** folder `hub/` ke portable agent — hub hanya di server pusat. Lihat [`HUB.md`](HUB.md).
 
