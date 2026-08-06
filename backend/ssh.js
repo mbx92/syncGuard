@@ -56,7 +56,8 @@ function readPublicKey() {
   return fs.readFileSync(publicKey, 'utf8').trim();
 }
 
-/** Cari ssh-keygen di bundle cwRsync, Windows OpenSSH, atau PATH. */
+/** Cari ssh-keygen di bundle cwRsync, Windows OpenSSH, atau PATH.
+ *  Tidak pernah mengembalikan string generik — jika tidak ditemukan, throw. */
 function resolveSshKeygenPath() {
   const candidates = [];
   if (process.platform === 'win32') {
@@ -68,7 +69,9 @@ function resolveSshKeygenPath() {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
-  return 'ssh-keygen';
+  const err = new Error('ssh-keygen tidak ditemukan. Pastikan folder tools/cwrsync ada.');
+  err.code = 'ENOENT';
+  throw err;
 }
 
 function sshWireEncode(typeStr, data) {
@@ -147,7 +150,8 @@ async function generateKeyPair() {
 
   return {
     ok: false,
-    error: nodeResult.error || execResult.error || 'Gagal generate SSH key.'
+    error: execResult.error || nodeResult.error || 'Gagal membuat key pair.',
+    details: { node: nodeResult.error, exec: execResult.error }
   };
 }
 
